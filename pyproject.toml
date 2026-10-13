@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "spectra"
+version = "0.1.0"
+description = "Architecture-aware GPU performance diagnosis and optimization"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+spectra = "adascope.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["adascope*"]
