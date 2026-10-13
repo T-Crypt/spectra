@@ -1,11 +1,11 @@
-# Spectra — Project Rules
+# Spectra - Project Rules
 
 ## Stack
-- **Language:** Python 3.11+ (3.14 preferred)
-- **Dependencies:** Standard library only for Phase 1. No third-party packages until Phase 2.
-- **Serialization:** JSON / JSONL
-- **Testing:** python -m unittest discover -s tests -- zero runtime dependencies
-- **Build:** python -m adascope or python -m spectra (console script via pyproject.toml)
+- Language: Python 3.11+ (3.14 preferred)
+- Dependencies: Standard library only for Phase 1. No third-party packages until Phase 2.
+- Serialization: JSON / JSONL
+- Testing: python -m unittest discover -s tests -- zero runtime dependencies
+- Build: python -m adascope or python -m spectra (console script via pyproject.toml)
 
 ## Project structure
 adascope/
@@ -34,20 +34,15 @@ tests/
 - The eval is the truth. A rule that cannot be shown to fire on a reproduction is a hypothesis in code.
 
 ## Testing
-- python -m unittest discover -s tests must pass with no GPU and no server (all hardware/network tests are skipped gracefully).
+- python -m unittest discover -s tests must pass with no GPU and no server.
 - Functional tests use fixtures, not live calls.
 - Hardware tests guard with @unittest.skipUnless when no GPU is present.
 - Network tests guard when the target server is unreachable.
 
 ## Git
-- Commit messages: <type>(<ref>): <summary> -- types: feat, fix, refactor, test, docs, chore, ci, build
+- Commit messages: type(ref): summary -- types: feat, fix, refactor, test, docs, chore, ci, build
 - Work in branches off master. One feature per branch.
 - No force-push to shared branches.
-
-## Architecture awareness
-- Rules live in profiles/<arch>.json, not in Python code.
-- Adding an architecture means adding a profile file and a rule set. No core code changes.
-- The adapter boundary keeps engines addable without touching the analysis layer.
 
 ## Phase 1 constraints
 - No third-party dependencies.
