@@ -41,6 +41,7 @@ CONFIDENCE_WEIGHT = {
 
 SPEC_ROUND_METHOD = "committed/(committed-accepted): tokens per decode forward pass"
 SPEC_NONE_METHOD = "no draft counters; no speculation assumed"
+SPEC_JSONL_METHOD = "tokens/rounds from the request log: tokens per decode round"
 REQUEST_RATE_METHOD = "delta(request_decode_tokens)/delta(request_decode_seconds), token-weighted"
 
 # Derived facts a rule may name in ``evidence_observations``, with the unit the
@@ -128,6 +129,20 @@ def facts_from_run(run: Run, profile: dict) -> dict:
     tok_delta = _delta(tokens)
     sec_delta = _delta(seconds)
     wall_span = (power[-1][0] - power[0][0]) if len(power) >= 2 else 0.0
+
+    request_tokens = _steady(series.get("request_decode_tokens", []))
+    request_seconds = _steady(series.get("request_decode_seconds", []))
+    request_rounds = _steady(series.get("request_decode_rounds", []))
+    request_tokens_delta = _delta(request_tokens) if len(request_tokens) >= 2 else None
+    request_seconds_delta = _delta(request_seconds) if len(request_seconds) >= 2 else None
+    request_rounds_delta = _delta(request_rounds) if len(request_rounds) >= 2 else None
+    request_rate_available = bool(
+        request_tokens_delta and request_seconds_delta and request_seconds_delta > 0)
+    request_rate = (request_tokens_delta / request_seconds_delta) if request_rate_available else 0.0
+    request_tpr_available = bool(
+        request_tokens_delta and request_rounds_delta and request_rounds_delta > 0)
+    request_tpr = (request_tokens_delta / request_rounds_delta) if request_tpr_available else 0.0
+
     if tok_delta is not None and sec_delta:
         decode_rate = tok_delta / sec_delta
         rate_method = "delta(tokens_predicted_total)/delta(tokens_predicted_seconds_total)"
@@ -135,6 +150,13 @@ def facts_from_run(run: Run, profile: dict) -> dict:
     elif tok_delta is not None and wall_span > 0:
         decode_rate = tok_delta / wall_span
         rate_method = "delta(tokens_predicted_total)/wall_window"
+        rate_available = True
+    elif request_rate_available:
+        # No engine counters in this run -- the v3 binary in service exposes no
+        # /metrics -- so the request log's own token-weighted rate stands in,
+        # labeled with its method. A run with neither keeps the sentinel.
+        decode_rate = request_rate
+        rate_method = REQUEST_RATE_METHOD
         rate_available = True
     else:
         # The sentinel the plan mandates in facts. ``decode_rate_available`` is
@@ -145,6 +167,11 @@ def facts_from_run(run: Run, profile: dict) -> dict:
         rate_available = False
 
     spec_factor, spec_method = spec_tokens_per_forward(series)
+    if spec_method == SPEC_NONE_METHOD and request_tpr_available and request_tpr > 1.0:
+        # Same quantity as the counter derivation -- committed tokens per
+        # decode round -- read from the request log when the engine exposes no
+        # draft counters. Counters win whenever they exist.
+        spec_factor, spec_method = request_tpr, SPEC_JSONL_METHOD
     drafted = _delta(_steady(series.get("draft_tokens_total", [])))
     accepted = _delta(_steady(series.get("draft_accepted_tokens_total", [])))
     acceptance = (accepted / drafted) if drafted and accepted is not None else 0.0
@@ -191,15 +218,9 @@ def facts_from_run(run: Run, profile: dict) -> dict:
     for fallback in THROTTLE_FALLBACKS:
         facts.setdefault(fallback, False)
 
-    request_tokens = _steady(series.get("request_decode_tokens", []))
-    request_seconds = _steady(series.get("request_decode_seconds", []))
-    request_rounds = _steady(series.get("request_decode_rounds", []))
-    if len(request_tokens) >= 2 and len(request_seconds) >= 2:
-        tokens_delta = _delta(request_tokens) or 0.0
-        seconds_delta = _delta(request_seconds) or 0.0
-        rounds_delta = _delta(request_rounds) or 0.0
-        facts["engine_request_rate_tok_s"] = (tokens_delta / seconds_delta) if seconds_delta > 0 else 0.0
-        facts["engine_request_tokens_per_round"] = (tokens_delta / rounds_delta) if rounds_delta > 0 else 0.0
+    if request_rate_available:
+        facts["engine_request_rate_tok_s"] = request_rate
+        facts["engine_request_tokens_per_round"] = request_tpr if request_tpr_available else 0.0
         facts["engine_request_count"] = len(request_tokens)
         facts["engine_request_method"] = REQUEST_RATE_METHOD
     else:

@@ -42,8 +42,9 @@ class ObserveBoundaryTest(unittest.TestCase):
 @unittest.skipUnless(gpu_available(), NO_GPU_REASON)
 class ObserveLiveTest(unittest.TestCase):
     def test_observe_writes_loadable_run(self):
-        if not engine_available(machine.ENGINE_HOST, machine.ENGINE_PORT):
-            self.skipTest(engine_down_reason(machine.ENGINE_HOST, machine.ENGINE_PORT))
+        port = machine.resolve_engine_port()
+        if not engine_available(machine.ENGINE_HOST, port):
+            self.skipTest(engine_down_reason(machine.ENGINE_HOST, port))
         artifact = machine.LIVE_ARTIFACT_PATH
         if not os.path.isfile(artifact):
             self.skipTest(machine.missing_artifact_reason(artifact))
@@ -51,7 +52,7 @@ class ObserveLiveTest(unittest.TestCase):
             out = Path(tmp) / "smoke.json"
             rc = main([
                 "observe",
-                "--target", f"{machine.ENGINE_HOST}:{machine.ENGINE_PORT}",
+                "--target", f"{machine.ENGINE_HOST}:{port}",
                 "--duration", "2",
                 "--hz", "2",
                 "--artifact", artifact,
