@@ -228,12 +228,10 @@ def preflight(artifact_bytes: int | None) -> tuple[bool, str]:
     return True, ""
 
 
-def _model_id(port: int | None = None) -> str:
+def _model_id() -> str:
     from adascope.adapters.lmcompat import LmCompat
 
-    if port is None:
-        port = machine.resolve_engine_port()
-    models = LmCompat(machine.ENGINE_HOST, port).models()
+    models = LmCompat(machine.ENGINE_HOST, machine.resolve_engine_port()).models()
     return str(models[0].get("id", "")) if models else ""
 
 
@@ -271,10 +269,9 @@ def _verdict(stage: str, run, facts: dict, rules: list[dict]) -> dict:
 
 
 def run_repetition(stage: str, index: int, artifact_path: str, model_id: str,
-                   rules: list[dict], variable: dict, port: int | None = None) -> dict:
+                   rules: list[dict], variable: dict) -> dict:
     """Observe one repetition under load, analyse it, and record the verdict."""
-    if port is None:
-        port = machine.resolve_engine_port()
+    port = machine.resolve_engine_port()
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()
     thread = threading.Thread(target=load_driver.drive_decode,
@@ -326,8 +323,7 @@ def run_stage(stage: str, artifact_path: str, rules: list[dict]) -> tuple[str, s
     note also reaches the caller's verdict. A test must never leave the card in
     a state it did not restore.
     """
-    port = machine.resolve_engine_port()
-    model_id = _model_id(port)
+    model_id = _model_id()
     baseline = power_limit_w()
     variable = {"name": "power_limit_w", "baseline": baseline, "treatment": None}
     guard = PowerLimitGuard()
@@ -347,7 +343,7 @@ def run_stage(stage: str, artifact_path: str, rules: list[dict]) -> tuple[str, s
                     guard.disarm()
                     return "inconclusive", f"the power limit is not writable: {message}"
                 variable["treatment"] = TREATMENT_POWER_LIMIT_W
-            records = [run_repetition(stage, i, artifact_path, model_id, rules, variable, port)
+            records = [run_repetition(stage, i, artifact_path, model_id, rules, variable)
                        for i in range(1, REPETITIONS + 1)]
         finally:
             restore_note = guard.restore()
