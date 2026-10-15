@@ -4,7 +4,7 @@ Goal, a walking skeleton that observes a live engine, stores a raw run, and rege
 
 This plan turns the milestone described in `docs/DESIGN.md` into an ordered set of commits. Each commit ends in a state that runs and is checked. Each commit is a future PR.
 
-C1-C3 are implemented and green. `python -m unittest discover -s tests` reports 9 tests OK: the package scaffold, the domain types in `adascope/model.py`, and the append-only run store in `adascope/store.py`. C4-C12 are not implemented.
+C1-C12 are implemented and green. `python -m unittest discover -s tests` reports 74 tests OK: the package scaffold, the domain types in `adascope/model.py`, the append-only run store in `adascope/store.py`, both adapters, `observe`, the reference model, the rule engine, analysis, the report, and the acceptance and eval tests.
 
 ## Definition of done
 

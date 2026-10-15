@@ -276,8 +276,8 @@ of stored data while leaving the experiment's identity in the same directory as 
 | `tests/test_analyze.py` | `power_ratio`, `objective_ratio`, `temp_c`, throttle OR-over-window, ranked order, deterministic ties | no | no | no |
 | `tests/test_report.py` | A1, A7, golden text | no | no | no |
 | `tests/test_acceptance.py` | A1 and A2 from a stored fixture; a live A2 variant when both guards pass | fixture: no | fixture: no | no |
-| `tests/test_adapters_nvml.py` | discover matches this card, sample keys, `nvidia-smi` cross-check | yes | no | no |
-| `tests/test_adapters_lmcompat.py` | Prometheus parser and JSONL parser (pure, unguarded); live counters and model list (guarded) | no | mixed | no |
+| `tests/test_nvml.py` | discover matches this card, sample keys, `nvidia-smi` cross-check | yes | no | no |
+| `tests/test_lmcompat.py` | Prometheus parser and JSONL parser (pure, unguarded); live counters and model list (guarded) | no | mixed | no |
 | `tests/test_cli_observe.py` | target parsing and rejection (unguarded); end-to-end observe and load (guarded) | mixed | mixed | no |
 | `tests/eval_induced_bottleneck.py` | A4, A5, A6, A8 | yes | yes | yes for E2 |
 

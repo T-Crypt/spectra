@@ -2,7 +2,7 @@
 
 This document carries the vision, the data model, the implementation plan, and the working conventions. `README.md` is the short introduction. This is the reference.
 
-C1-C3 are implemented and green: the package scaffold, the domain types in `adascope/model.py`, and the append-only run store in `adascope/store.py`, with `python -m unittest discover -s tests` reporting 9 tests OK. C4-C12 are not implemented, so treat every type and path beyond those three commits as a proposal until code lands and an acceptance test passes.
+C1-C12 are implemented and green: the package scaffold, the domain types in `adascope/model.py`, the append-only run store in `adascope/store.py`, both adapters, `observe`, the reference model, the rule engine, analysis, the report, and the acceptance and eval tests, with `python -m unittest discover -s tests` reporting 74 tests OK. Live stages E1 and E2 need the engine up and, for E2, a writable power limit.
 
 ## Vision
 
