@@ -25,6 +25,11 @@ LIVE_ARTIFACT_PATH = "/home/tcrypt/ninfer-v3-artifacts/qwen3_8_27b.v3.ninfer"
 RECORDED_ARTIFACT_PATH = "/home/tcrypt/ninfer-4090/models/qwen3_8_27b.ninfer"
 RECORDED_ARTIFACT_BYTES = 18210531328
 
+# The request log the live backend appends, enabled with --request-log-jsonl
+# in the llama-swap entry. observe() skips it quietly when absent, so a run
+# without it is NVML-only rather than an error.
+REQUEST_LOG_PATH = "/home/tcrypt/ninfer-4090/logs/ninfer-qwen3_8_27b.jsonl"
+
 
 def artifact_bytes(path: str) -> int | None:
     """The file's real size, or None when this machine does not have it."""

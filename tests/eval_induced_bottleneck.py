@@ -280,7 +280,8 @@ def run_repetition(stage: str, index: int, artifact_path: str, model_id: str,
     thread.start()
     try:
         path = observe(f"{machine.ENGINE_HOST}:{port}", duration_s=DURATION_S, hz=HZ,
-                       artifact_path=artifact_path, out=RUNS_DIR)
+                       artifact_path=artifact_path, jsonl_path=machine.REQUEST_LOG_PATH,
+                       out=RUNS_DIR)
     finally:
         stop.set()
         thread.join(timeout=5.0)
@@ -353,7 +354,9 @@ def run_stage(stage: str, artifact_path: str, rules: list[dict]) -> tuple[str, s
         factors = [r["spec_tokens_per_forward"] for r in records]
         cv = (statistics.stdev(factors) / statistics.fmean(factors)) if len(factors) > 1 and statistics.fmean(factors) else 0.0
         hits = sum(1 for r in records if r["top_rule_id"] == SEEDED_RULE)
-        if cv > A6_MAX_CV:
+        if verdicts.count("inconclusive") == REPETITIONS:
+            verdict, note = "inconclusive", "no usable control repetition"
+        elif cv > A6_MAX_CV:
             verdict, note = "inconclusive", f"spec factor CV above 5 percent: {cv:.3f}"
         elif hits == 0:
             verdict, note = "confirmed", f"0 of {REPETITIONS} control runs ranked {SEEDED_RULE} first"
@@ -416,8 +419,19 @@ def main() -> int:
         e2_verdict, e2_note = "skipped", e1_note
         print(f"{'E2 treatment:':<{LABEL_WIDTH}} skipped - {e1_note}", flush=True)
     else:
-        e2_verdict, e2_note = run_stage("E2", artifact_path, rules)
-        print(f"{'E2 treatment:':<{LABEL_WIDTH}} {e2_verdict} - {e2_note}", flush=True)
+        # The backend unloads after 300 s idle, so E1's ten minutes can end it:
+        # re-check before touching the power limit, and turn losing the engine
+        # mid-stage into an inconclusive record rather than a traceback.
+        ok, reason = preflight(artifact_bytes)
+        if not ok:
+            e2_verdict, e2_note = "skipped", reason
+            print(f"{'E2 treatment:':<{LABEL_WIDTH}} skipped - {reason}", flush=True)
+        else:
+            try:
+                e2_verdict, e2_note = run_stage("E2", artifact_path, rules)
+            except OSError as exc:
+                e2_verdict, e2_note = "inconclusive", f"engine lost mid-run: {exc}"
+            print(f"{'E2 treatment:':<{LABEL_WIDTH}} {e2_verdict} - {e2_note}", flush=True)
     stage_lines.append(("E2", e2_verdict, e2_note))
 
     # The summary counts the two live stages: A4 is a claim about E1 and E2.
