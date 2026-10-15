@@ -87,11 +87,13 @@ class JsonlReaderTest(unittest.TestCase):
     def test_a_different_schema_version_is_not_read_as_v20(self):
         """A4: the gate is the version, not the absence of keys.
 
-        A v21 record that keeps every v20 key would otherwise be read as v20
+        A v22 record that keeps every v20 key would otherwise be read as v20
         silently. The whole file is dropped, including records already read, so
         a log from two engine builds is never mixed into one summary.
+        v21 is accepted: its request_done keys were verified against the live
+        engine on 2026-10-15.
         """
-        v21 = ('{"schema_version": 21, "event": "request_done",'
+        v21 = ('{"schema_version": 22, "event": "request_done",'
                ' "result": {"completion_tokens": 5}, "timings_seconds": {"decode": 1.0}}')
         summary = parse_jsonl_lines([v21])
         self.assertEqual(summary.request_count, 0)

@@ -21,7 +21,9 @@ from ..model import Workload
 
 KNOWN_PREFIXES = ("llamacpp:", "ninfer:")
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
+
+SUPPORTED_SCHEMA_VERSIONS = (20, 21)
 
 
 def parse_metrics_text(body: str) -> dict[str, float]:
@@ -161,7 +163,7 @@ def _request_from_record(record: dict[str, Any]) -> JsonlRequest | None:
 def parse_jsonl_lines(lines: Iterable[str]) -> JsonlSummary:
     """Read request-log lines into a summary.
 
-    The reader is gated on :data:`SCHEMA_VERSION`. A record carrying a different
+    The reader is gated on :data:`SUPPORTED_SCHEMA_VERSIONS`. A record carrying a different
     version ends the read and the caller gets an empty summary: a version this
     reader does not know may mean different keys, and one wrong field is worse
     than a number Spectra reports as unavailable. A line that is not JSON, or a
@@ -181,7 +183,7 @@ def parse_jsonl_lines(lines: Iterable[str]) -> JsonlSummary:
             continue
         version = _int_or_none(record.get("schema_version"))
         if version is not None:
-            if version != SCHEMA_VERSION:
+            if version != SCHEMA_VERSION and version not in SUPPORTED_SCHEMA_VERSIONS:
                 return JsonlSummary()
             summary.schema_version = version
         event = record.get("event")
