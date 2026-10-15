@@ -31,6 +31,12 @@ Initial target: NVIDIA Ada Lovelace (sm_89), local LLM inference workloads. The 
 - [VISION.md](docs/VISION.md) — Broad vision and long-term direction (consolidated from SMTrace)
 - [MILESTONE-1.md](docs/MILESTONE-1.md) — Phase 1 implementation plan with acceptance tests
 
+### Milestone 1 research design
+
+- [CONSOLIDATION.md](docs/CONSOLIDATION.md) — What SMTrace and AdaScope contribute: kept, merged, redesigned, deferred, and what to preserve before archival
+- [RESEARCH.md](docs/RESEARCH.md) — Prior art, what the tools already on this machine already solve, and the contribution that remains
+- [EVAL.md](docs/EVAL.md) — The falsifiable evaluation design: one question, three hypotheses, the smallest separating experiment, and what counts as inconclusive
+
 ## Long-term direction
 
 Build a system that learns which optimization experiments work for a specific hardware and workload combination, and keeps the evidence needed to reproduce the result. The intended outcome is less guesswork, fewer ineffective tuning changes, and a growing library of validated GPU optimization knowledge.
