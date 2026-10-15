@@ -4,16 +4,16 @@ Goal, a walking skeleton that observes a live engine, stores a raw run, and rege
 
 This plan turns the milestone described in `docs/DESIGN.md` into an ordered set of commits. Each commit ends in a state that runs and is checked. Each commit is a future PR.
 
-Nothing here is implemented yet.
+C1-C3 are implemented and green. `python -m unittest discover -s tests` reports 9 tests OK: the package scaffold, the domain types in `adascope/model.py`, and the append-only run store in `adascope/store.py`. C4-C12 are not implemented.
 
 ## Definition of done
 
 The milestone is done when all of these hold on the test machine.
 
-1. `adascope observe` writes a `Run` to disk from live NVML and engine data.
-2. `adascope report` renders that `Run` to text, reading no live source.
+1. `spectra observe` writes a `Run` to disk from live NVML and engine data.
+2. `spectra report` renders that `Run` to text, reading no live source.
 3. Rendering the same stored `Run` twice is byte-identical.
-4. The decode rate AdaScope derives from engine counters matches the engine's own per-request decode rate within one percent.
+4. The decode rate Spectra derives from engine counters matches the engine's own per-request decode rate within one percent.
 5. The induced-bottleneck eval ranks the seeded cause first for at least the power-cap case.
 
 ## Out of scope
@@ -37,6 +37,8 @@ These are measured on the test machine and the plan depends on them.
 | Engine counters | `llamacpp:tokens_predicted_total`, `llamacpp:tokens_predicted_seconds_total`, `ninfer:draft_tokens_total`, `ninfer:draft_accepted_tokens_total` | `curl /metrics` |
 | Observed cumulative decode rate | 65329 / 598.824419 = 109.1 tok/s | `curl /metrics` |
 | Observed speculative acceptance | 43693 / 65850 = 66.4% | `curl /metrics` |
+
+Driver note, 2026-10-15: `nvidia-smi` now reports 615.78.08 for the driver, with CUDA UMD 13.4 unchanged. The 615.71.09 above is the value measured when this table was written. Nothing else in the table was re-measured.
 | Memory ceiling, pre-spec | 1008e9 / 18210531328 = 55.4 tok/s | derived |
 | Nsight | not installed | `command -v ncu nsys` |
 | NVML library | `libnvidia-ml.so.1` loads | `ctypes` probe |
@@ -56,7 +58,7 @@ HardwareProfile
   mem_bandwidth_measured_gbps        # None unless a probe ran
   power_limit_w, power_default_w, power_max_w
   clock_sm_max_mhz, clock_mem_max_mhz
-  driver_version, cuda_umd_version
+  driver_version, cuda_driver_version
 
 Workload
   adapter_id, engine_id, engine_version
@@ -120,7 +122,7 @@ Twelve commits in five stacked units. Each line is a commit. The verification co
 
 ### C1 `chore: scaffold package, test harness, and ignore rules`
 
-Files. `.gitignore` (`runs/`, `__pycache__/`, `*.pyc`, `.venv/`). `pyproject.toml` with `requires-python >= 3.11`, no runtime dependencies, and a console script `adascope = adascope.cli:main`. `adascope/__init__.py`. `adascope/__main__.py` calling `cli.main`. `adascope/cli.py` with an argparse shell that dispatches to nothing yet. `tests/__init__.py`.
+Files. `.gitignore` (`runs/`, `__pycache__/`, `*.pyc`, `.venv/`). `pyproject.toml` with `requires-python >= 3.11`, no runtime dependencies, and a console script `spectra = adascope.cli:main`. `adascope/__init__.py`. `adascope/__main__.py` calling `cli.main`. `adascope/cli.py` with an argparse shell that dispatches to nothing yet. `tests/__init__.py`.
 
 Why first. Every later commit imports this package and runs under this harness. Scaffold before features.
 
@@ -166,9 +168,9 @@ Test, skipped when the server is down. Against `127.0.0.1:5804`, assert `llamacp
 
 Files. `adascope/cli.py` extended, `adascope/observe.py`, `tests/test_cli_observe.py`.
 
-Interface. `adascope observe --target HOST:PORT --duration 30 --hz 2 --artifact PATH --config FILE --metrics-jsonl PATH --out runs/`. Parse and validate the target at the boundary. Loop for `duration`, sample NVML at `hz`, poll `/metrics` at `hz`, accumulate two `Series` (hardware, engine) plus per-request series from JSONL when present. Build the `Run` and `save_run`.
+Interface. `spectra observe --target HOST:PORT --duration 30 --hz 2 --artifact PATH --config FILE --metrics-jsonl PATH --out runs/`. Parse and validate the target at the boundary. Loop for `duration`, sample NVML at `hz`, poll `/metrics` at `hz`, accumulate two `Series` (hardware, engine) plus per-request series from JSONL when present. Build the `Run` and `save_run`.
 
-Verify. `python -m adascope observe --target 127.0.0.1:5804 --duration 30 --hz 2 --artifact /home/tcrypt/ninfer-4090/models/qwen3_8_27b.ninfer --out runs/smoke.json`, then load the file and assert the sample count is at least `duration * hz` minus a tolerance and both series are non-empty.
+Verify. `python -m spectra observe --target 127.0.0.1:5804 --duration 30 --hz 2 --artifact /home/tcrypt/ninfer-4090/models/qwen3_8_27b.ninfer --out runs/smoke.json`, then load the file and assert the sample count is at least `duration * hz` minus a tolerance and both series are non-empty.
 
 ### C7 `feat(reference): add memory-bound dense decode model`
 

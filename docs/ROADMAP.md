@@ -1,8 +1,8 @@
 # Spectra Roadmap
 
-Phased plan combining the original SMTrace and AdaScope roadmaps into a single timeline.
+Phased plan combining the original SMTrace and Spectra roadmaps into a single timeline.
 
-## Phase 1: Observe and model (AdaScope Milestone 1)
+## Phase 1: Observe and model (Spectra Milestone 1)
 
 The walking skeleton. One command that observes a live inference server, writes a structured run record, and renders a correlated report.
 

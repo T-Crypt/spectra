@@ -1,18 +1,18 @@
-# AdaScope design
+# Spectra design
 
 This document carries the vision, the data model, the implementation plan, and the working conventions. `README.md` is the short introduction. This is the reference.
 
-Nothing here is implemented yet. Treat every type and path as a proposal until code lands and an acceptance test passes.
+C1-C3 are implemented and green: the package scaffold, the domain types in `adascope/model.py`, and the append-only run store in `adascope/store.py`, with `python -m unittest discover -s tests` reporting 9 tests OK. C4-C12 are not implemented, so treat every type and path beyond those three commits as a proposal until code lands and an acceptance test passes.
 
 ## Vision
 
-AdaScope is a diagnosis and memory layer for GPU inference performance.
+Spectra is a diagnosis and memory layer for GPU inference performance.
 
 The end state is a tool that answers one question well. Given a workload running under-perform on a specific GPU, what is the most likely limiting resource, what evidence supports that, and what is the smallest change worth trying. Then it remembers the answer so the next person does not rediscover it.
 
 The shape of that answer is a ranked hypothesis with linked evidence and a testable experiment. The shape of the memory is a store of Findings keyed by architecture, engine, workload class, and configuration delta.
 
-A useful metaphor is a debugger for performance. A debugger does not change how your program runs. It observes, attributes, and lets you test a theory. AdaScope is that, for the gap between what a GPU workload does and what the hardware allows.
+A useful metaphor is a debugger for performance. A debugger does not change how your program runs. It observes, attributes, and lets you test a theory. Spectra is that, for the gap between what a GPU workload does and what the hardware allows.
 
 ### What the unit of value is
 
@@ -28,34 +28,34 @@ If a proposed feature does not produce one of those, it is infrastructure and sh
 
 ## Positioning and boundaries
 
-AdaScope is the analysis layer. It sits between measurement producers and a human decision.
+Spectra is the analysis layer. It sits between measurement producers and a human decision.
 
-| Concern | Owner | AdaScope's role |
+| Concern | Owner | Spectra's role |
 | --- | --- | --- |
 | Hardware telemetry | nvidia-smi, NVML | consume |
 | Engine counters and timings | the inference engine | consume |
 | Kernel traces | nsys, ncu | import when present |
 | Running a benchmark | the engine's own bench or a controlled runner | Phase 3, minimal |
-| Storing a baseline | AdaScope | own |
-| Interpreting a gap | AdaScope | own |
+| Storing a baseline | Spectra | own |
+| Interpreting a gap | Spectra | own |
 | Applying a config change | a human, via a generated diff | never auto-apply |
 
 The test machine reinforces the boundary. Nsight Compute and Nsight Systems are not installed, and the live inference server exposes its own Prometheus counters and per-request timings. So the first real integration is telemetry plus engine counters, and kernel traces stay optional.
 
 ### Relationship to an existing engine
 
-The first concrete workload is a local `ninfer` server. That engine already ships a benchmark tool, a Python orchestration layer, a per-model performance doc, and a Prometheus endpoint. AdaScope must not rebuild any of that.
+The first concrete workload is a local `ninfer` server. That engine already ships a benchmark tool, a Python orchestration layer, a per-model performance doc, and a Prometheus endpoint. Spectra must not rebuild any of that.
 
-Reconnaissance of the ninfer tree located these producers, which AdaScope should consume rather than duplicate:
+Reconnaissance of the ninfer tree located these producers, which Spectra should consume rather than duplicate:
 
 * `GET /metrics`, Prometheus text format, in `src/serve/http_server.cpp` and `src/serve/serve_metrics.cpp`.
 * A per-response `timings` block in the OpenAI-compatible reply, in `src/serve/openai_chat_response.cpp`.
 * A structured JSONL stream enabled by `--request-log-jsonl`, schema v20, in `src/serve/request_log.cpp`, with per-request `timings_seconds`, host and device wait, speculative acceptance, and KV cache transfer and occupancy.
 * Existing benchmark entry points under `tools/bench/` and `docs/performance/methodology.md`.
 
-Those references come from reconnaissance, not from AdaScope's own reading, and line numbers belong to the `ninfer-v3` worktree. Re-verify before depending on them.
+Those references come from reconnaissance, not from Spectra's own reading, and line numbers belong to the `ninfer-v3` worktree. Re-verify before depending on them.
 
-The lesson is the design rule. AdaScope consumes. The engine measures.
+The lesson is the design rule. Spectra consumes. The engine measures.
 
 ## Data model
 
@@ -76,6 +76,9 @@ HardwareProfile          # probed at runtime, never hardcoded
   power_limit_w, power_default_w, power_max_w
   clock_sm_max_mhz, clock_mem_max_mhz
   driver_version, cuda_driver_version
+
+# Phase 1 freezes a subset of these fields; see MILESTONE-1.md.
+# The full list above is the target schema.
 ```
 
 ### Architecture profile and rules
@@ -121,6 +124,7 @@ Run
   sampling: {interval_ms, duration_s}
   sources: [adapter_id]
   artifacts: [jsonl_path, log_path, ppm_or_other]
+  series: [Series]
 
 Series
   run_id, metric, unit, source, quality: measured | derived
@@ -264,23 +268,23 @@ Not in scope for milestone 1: applying changes, the controlled runner, kernel tr
 Proposed CLI:
 
 ```
-adascope observe --target 127.0.0.1:5804 --duration 120 --hz 2 --out runs/<id>.json
-adascope report runs/<id>.json
+spectra observe --target 127.0.0.1:5804 --duration 120 --hz 2 --out runs/<id>.json
+spectra report runs/<id>.json
 ```
 
 ### Acceptance tests
 
 These are the proof. Each is a real command with a real expected value, not a code review.
 
-1. **Reproducibility.** `adascope report` run twice against the same stored `Run` produces byte-identical output. The report reads nothing live.
+1. **Reproducibility.** `spectra report` run twice against the same stored `Run` produces byte-identical output. The report reads nothing live.
    Prove it works by running the command twice and diffing. The artifact is the diff, empty.
-2. **Fidelity.** The decode tokens/sec AdaScope derives from the stored samples matches the engine's own reported `predicted_per_second` for the same window within one percent. If it does not, AdaScope measured something other than the work.
+2. **Fidelity.** The decode tokens/sec Spectra derives from the stored samples matches the engine's own reported `predicted_per_second` for the same window within one percent. If it does not, Spectra measured something other than the work.
 3. **Reference sanity.** The computed memory-bound ceiling for the 27B artifact lands in the expected band from the derivation. A ceiling far above the hardware's achievable bandwidth means the model is wrong.
 4. **Attribution, the real test.** Under a deliberately induced bottleneck, the top-ranked hypothesis names the induced cause. See below.
 
 ### The induced-bottleneck eval
 
-Correlation cannot prove causation. The honest way to prove the engine works is to induce a known cause and check that AdaScope names it.
+Correlation cannot prove causation. The honest way to prove the engine works is to induce a known cause and check that Spectra names it.
 
 The test is cheap and needs no Nsight.
 
@@ -361,14 +365,14 @@ tests/
 * **Boundaries do the validation.** Parse and validate at the CLI, in each adapter, and in the store on read. Trust the domain types everywhere inside. Business logic stays pure and framework-free.
 * **The report is a pure function of a stored run.** If rendering needs a live call, the model is missing a field.
 * **Every number is labeled.** Measured, derived, or hypothesis. A report that cannot say which is wrong.
-* **Never mutate a running process.** AdaScope reads. It proposes a diff. A human applies it.
+* **Never mutate a running process.** Spectra reads. It proposes a diff. A human applies it.
 * **One variable per experiment.** If two keys change, the result is not attributable.
 * **Do not duplicate a producer.** If the engine or nsys already emits it, consume it.
 * **The eval is the truth.** A rule that cannot be shown to fire on a reproduction is a hypothesis in code.
 
 ## Open decisions
 
-These are calls for the operator. Each has a default AdaScope will proceed with.
+These are calls for the operator. Each has a default Spectra will proceed with.
 
 1. **First win.** Default: one command that explains a single `ninfer` decode run on this 4090.
 2. **Reference before evidence.** Default: no diagnosis without a ReferenceModel. Confirm this is acceptable, because it front-loads work before any pretty output.
