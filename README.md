@@ -1,5 +1,7 @@
 # Spectra
 
+![Spectra banner](assets/banner.png)
+
 Architecture-aware GPU performance diagnosis and optimization.
 
 Spectra explains why GPU workloads perform the way they do — connecting measurements to hypotheses, proposing controlled experiments, and remembering validated findings. It does not replace Nsight, nvidia-smi, or your inference engine's own metrics. Those produce numbers. Spectra explains them and keeps the explanation attached to the evidence.
