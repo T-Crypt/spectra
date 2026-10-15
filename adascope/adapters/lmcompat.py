@@ -21,8 +21,6 @@ from ..model import Workload
 
 KNOWN_PREFIXES = ("llamacpp:", "ninfer:")
 
-SCHEMA_VERSION = 21
-
 SUPPORTED_SCHEMA_VERSIONS = (20, 21)
 
 
@@ -181,9 +179,9 @@ def parse_jsonl_lines(lines: Iterable[str]) -> JsonlSummary:
             continue
         if not isinstance(record, dict):
             continue
-        version = _int_or_none(record.get("schema_version"))
-        if version is not None:
-            if version != SCHEMA_VERSION and version not in SUPPORTED_SCHEMA_VERSIONS:
+        if "schema_version" in record:
+            version = _int_or_none(record.get("schema_version"))
+            if version is None or version not in SUPPORTED_SCHEMA_VERSIONS:
                 return JsonlSummary()
             summary.schema_version = version
         event = record.get("event")

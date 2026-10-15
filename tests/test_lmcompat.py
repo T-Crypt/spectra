@@ -103,6 +103,14 @@ class JsonlReaderTest(unittest.TestCase):
         self.assertEqual(summary.config, {})
         self.assertIsNone(summary.schema_version)
 
+    def test_a_string_schema_version_is_rejected(self):
+        """"20" is not 20: a version key that is not an int is foreign."""
+        line = ('{"schema_version": "20", "event": "request_done",'
+                ' "result": {"completion_tokens": 5}, "timings_seconds": {"decode": 1.0}}')
+        summary = parse_jsonl_lines([line])
+        self.assertEqual(summary.request_count, 0)
+        self.assertIsNone(summary.schema_version)
+
     def test_a_record_without_a_decode_time_is_skipped(self):
         """A non-positive decode time is not a measurement."""
         for decode in ("0", "-1.5"):
