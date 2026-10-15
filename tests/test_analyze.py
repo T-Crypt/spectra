@@ -141,6 +141,28 @@ class AnalyzeTest(unittest.TestCase):
             self.assertEqual([h.rules[0] for h in hypotheses_from_run(run, profile(), shuffled)], expected)
         self.assertEqual([h.rules[0] for h in rank(hypotheses_from_run(run, profile(), base))], expected)
 
+    def test_jsonl_only_run_derives_spec_and_rate(self):
+        """No counters: the request log stands in, labeled with its method.
+
+        The v3 binary in service exposes no /metrics, so a live loaded run
+        carries per-request series only. The spec factor must come from
+        tokens/rounds and the decode rate from the token-weighted aggregate;
+        counters still win whenever they exist (see the recorded-counters
+        test, which keeps the counter method despite carrying both).
+        """
+        facts = facts_from_run(fixtures.jsonl_only_run(), profile())
+        self.assertAlmostEqual(facts["spec_tokens_per_forward"], 3.0195, delta=0.03)
+        self.assertEqual(facts["spec_method"],
+                         "tokens/rounds from the request log: tokens per decode round")
+        self.assertTrue(facts["decode_rate_available"])
+        self.assertAlmostEqual(facts["decode_rate_tok_s"], 109.0954, delta=0.01)
+        self.assertEqual(facts["decode_rate_method"],
+                         "delta(request_decode_tokens)/delta(request_decode_seconds), token-weighted")
+        self.assertTrue(facts["objective_ratio_available"])
+        self.assertAlmostEqual(facts["objective_ratio"], 0.6527, delta=0.003)
+        self.assertEqual([h.rules[0] for h in hypotheses_from_run(
+            fixtures.jsonl_only_run(), profile(), rules())], [])
+
 
 if __name__ == "__main__":
     unittest.main()

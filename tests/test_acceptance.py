@@ -44,7 +44,7 @@ def rules():
 
 
 def engine_is_up() -> bool:
-    return engine_available(machine.ENGINE_HOST, machine.ENGINE_PORT)
+    return engine_available(machine.ENGINE_HOST, machine.resolve_engine_port())
 
 
 class AcceptanceFixtureTest(unittest.TestCase):
@@ -94,8 +94,9 @@ class AcceptanceLiveTest(unittest.TestCase):
         return str(models[0].get("id", ""))
 
     def test_a2_live_fidelity_against_per_request_decode_time(self):
+        port = machine.resolve_engine_port()
         if not engine_is_up():
-            self.skipTest(engine_down_reason(machine.ENGINE_HOST, machine.ENGINE_PORT))
+            self.skipTest(engine_down_reason(machine.ENGINE_HOST, port))
         jsonl = os.environ.get(LIVE_JSONL_ENV, "")
         if not jsonl:
             self.skipTest(
@@ -103,21 +104,21 @@ class AcceptanceLiveTest(unittest.TestCase):
                 "so per-request decode time cannot be measured"
             )
         driver = self._driver()
-        client = LmCompat(machine.ENGINE_HOST, machine.ENGINE_PORT)
+        client = LmCompat(machine.ENGINE_HOST, port)
         model_id = self._model_id(client)
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "live.json"
             stop = threading.Event()
             thread = threading.Thread(
                 target=driver.drive_decode,
-                args=(machine.ENGINE_HOST, machine.ENGINE_PORT, model_id, stop),
+                args=(machine.ENGINE_HOST, port, model_id, stop),
                 daemon=True,
             )
             thread.start()
             try:
                 rc = main([
                     "observe",
-                    "--target", f"{machine.ENGINE_HOST}:{machine.ENGINE_PORT}",
+                    "--target", f"{machine.ENGINE_HOST}:{port}",
                     "--duration", "30",
                     "--hz", "2",
                     "--artifact", machine.LIVE_ARTIFACT_PATH,
@@ -144,14 +145,18 @@ class AcceptanceLiveTest(unittest.TestCase):
         denominators differ, so this test prints the gap and asserts only that
         both numbers are positive.
         """
+        port = machine.resolve_engine_port()
         if not engine_is_up():
-            self.skipTest(engine_down_reason(machine.ENGINE_HOST, machine.ENGINE_PORT))
+            self.skipTest(engine_down_reason(machine.ENGINE_HOST, port))
         driver = self._driver()
-        client = LmCompat(machine.ENGINE_HOST, machine.ENGINE_PORT, timeout_s=600.0)
+        client = LmCompat(machine.ENGINE_HOST, port, timeout_s=600.0)
         model_id = self._model_id(client)
-        counters_before = client.metrics()
         try:
-            reply = driver.stream_completion(machine.ENGINE_HOST, machine.ENGINE_PORT, model_id,
+            counters_before = client.metrics()
+        except Exception as exc:
+            self.skipTest(f"the backend exposes no /metrics: {exc}")
+        try:
+            reply = driver.stream_completion(machine.ENGINE_HOST, port, model_id,
                                              max_tokens=64)
         except OSError as exc:
             # An engine that answers /health but refuses the completion request is

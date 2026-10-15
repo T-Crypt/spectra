@@ -213,11 +213,12 @@ def preflight(artifact_bytes: int | None) -> tuple[bool, str]:
     single-engine machine means a co-tenant, and a contended run is recorded as
     inconclusive rather than measured.
     """
+    port = machine.resolve_engine_port()
     processes = compute_processes()
     if len(processes) > 1:
         return False, "contended card: " + "; ".join(processes)
-    if not engine_available(machine.ENGINE_HOST, machine.ENGINE_PORT):
-        return False, engine_down_reason(machine.ENGINE_HOST, machine.ENGINE_PORT)
+    if not engine_available(machine.ENGINE_HOST, port):
+        return False, engine_down_reason(machine.ENGINE_HOST, port)
     free = gpu_free_bytes()
     if free is None:
         return False, "nvidia-smi did not report free VRAM"
@@ -227,16 +228,19 @@ def preflight(artifact_bytes: int | None) -> tuple[bool, str]:
     return True, ""
 
 
-def _model_id() -> str:
+def _model_id(port: int | None = None) -> str:
     from adascope.adapters.lmcompat import LmCompat
 
-    models = LmCompat(machine.ENGINE_HOST, machine.ENGINE_PORT).models()
+    if port is None:
+        port = machine.resolve_engine_port()
+    models = LmCompat(machine.ENGINE_HOST, port).models()
     return str(models[0].get("id", "")) if models else ""
 
 
 def _counter_moved(run) -> bool:
     for series in run.series:
-        if series.metric == "tokens_predicted_total" and len(series.samples) >= 2:
+        if series.metric in ("tokens_predicted_total", "request_decode_tokens") \
+                and len(series.samples) >= 2:
             return series.samples[-1][1] - series.samples[0][1] > 0
     return False
 
@@ -267,16 +271,18 @@ def _verdict(stage: str, run, facts: dict, rules: list[dict]) -> dict:
 
 
 def run_repetition(stage: str, index: int, artifact_path: str, model_id: str,
-                   rules: list[dict], variable: dict) -> dict:
+                   rules: list[dict], variable: dict, port: int | None = None) -> dict:
     """Observe one repetition under load, analyse it, and record the verdict."""
+    if port is None:
+        port = machine.resolve_engine_port()
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()
     thread = threading.Thread(target=load_driver.drive_decode,
-                              args=(machine.ENGINE_HOST, machine.ENGINE_PORT, model_id, stop),
+                              args=(machine.ENGINE_HOST, port, model_id, stop),
                               daemon=True)
     thread.start()
     try:
-        path = observe(f"{machine.ENGINE_HOST}:{machine.ENGINE_PORT}", duration_s=DURATION_S, hz=HZ,
+        path = observe(f"{machine.ENGINE_HOST}:{port}", duration_s=DURATION_S, hz=HZ,
                        artifact_path=artifact_path, out=RUNS_DIR)
     finally:
         stop.set()
@@ -320,7 +326,8 @@ def run_stage(stage: str, artifact_path: str, rules: list[dict]) -> tuple[str, s
     note also reaches the caller's verdict. A test must never leave the card in
     a state it did not restore.
     """
-    model_id = _model_id()
+    port = machine.resolve_engine_port()
+    model_id = _model_id(port)
     baseline = power_limit_w()
     variable = {"name": "power_limit_w", "baseline": baseline, "treatment": None}
     guard = PowerLimitGuard()
@@ -340,7 +347,7 @@ def run_stage(stage: str, artifact_path: str, rules: list[dict]) -> tuple[str, s
                     guard.disarm()
                     return "inconclusive", f"the power limit is not writable: {message}"
                 variable["treatment"] = TREATMENT_POWER_LIMIT_W
-            records = [run_repetition(stage, i, artifact_path, model_id, rules, variable)
+            records = [run_repetition(stage, i, artifact_path, model_id, rules, variable, port)
                        for i in range(1, REPETITIONS + 1)]
         finally:
             restore_note = guard.restore()

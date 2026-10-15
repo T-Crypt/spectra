@@ -263,6 +263,27 @@ def no_rate_run() -> Run:
     )
 
 
+def jsonl_only_run() -> Run:
+    """No engine counters, only the request log: the v3 binary in service.
+
+    Carries the recorded totals through the per-request series alone, so the
+    spec factor must come from tokens/rounds and the decode rate from the
+    token-weighted request aggregate. Power stays slack and the throttle bits
+    quiet, so no rule fires; the test pins the derivation, not a diagnosis.
+    """
+    span = 20.0
+    series = [
+        _flat("power_draw_w", 300.0, "W", "nvml", count=10, span_s=span),
+        _flat("temp_c", 60.0, "C", "nvml", count=10, span_s=span),
+        _flat("throttle.sw_power_cap", 0.0, "", "nvml", count=10, span_s=span),
+        _flat("throttle.sw_thermal_slowdown", 0.0, "", "nvml", count=10, span_s=span),
+        _flat("throttle.hw_thermal_slowdown", 0.0, "", "nvml", count=10, span_s=span),
+    ]
+    series.extend(_per_request_series(RECORDED_TOKENS, RECORDED_DECODE_SECONDS, RECORDED_ROUNDS,
+                                      count=20, span_s=span))
+    return _run("fixture-jsonl-only", series, ["nvml", "lmcompat:jsonl"])
+
+
 def two_rules_run() -> Run:
     """Power cap and thermal throttle both fire, on a 3.3/3.3 tie."""
     span = 20.0
