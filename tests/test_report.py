@@ -11,11 +11,14 @@ A wording change needs the golden update in the same commit; test_golden_file
 also asserts that the committed JSON still equals the Python fixture.
 """
 
+import contextlib
+import io
 import re
 import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from adascope.cli import main
 from adascope.engine import default_rules_path, load_rules
 from adascope.reference import load_profile
 from adascope.report import render
@@ -115,6 +118,30 @@ class ReportTest(unittest.TestCase):
     def test_golden_file_matches(self):
         self.assertEqual(load_run(FIXTURE_RUN), fixtures.recorded_run())
         self.assertEqual(render(load_run(FIXTURE_RUN), profile(), rules()), GOLDEN.read_text(encoding="utf-8"))
+
+
+class ReportCliTest(unittest.TestCase):
+    """Acceptance A1 through the documented command, not just ``render``.
+
+    Every other report test calls ``render`` directly, so the ``report``
+    subcommand itself -- argument parsing, default profile and rule paths, the
+    print, the exit status -- had no success-path coverage. The README's second
+    quick-start line and acceptance test 1 are both about this command.
+    """
+
+    def _report(self, path: Path) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = main(["report", str(path)])
+        return rc, out.getvalue()
+
+    def test_report_command_is_reproducible_from_the_stored_file(self):
+        first_rc, first = self._report(FIXTURE_RUN)
+        self.assertEqual(first_rc, 0)
+        second_rc, second = self._report(FIXTURE_RUN)
+        self.assertEqual(second_rc, 0)
+        self.assertEqual(first, second)
+        self.assertEqual(first, GOLDEN.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
