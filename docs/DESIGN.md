@@ -352,10 +352,10 @@ adascope/
   reference.py      # ReferenceModel derivations
   rules/
     sm89.json
+  profiles/
+    sm89.json
   engine.py         # pure: observations -> ranked hypotheses
   report.py         # pure: run -> text
-profiles/
-  sm89.json
 runs/               # local, gitignored
 tests/
 ```
