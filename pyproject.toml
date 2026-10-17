@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=61.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "spectra"
@@ -14,3 +14,8 @@ spectra = "adascope.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["adascope*"]
+
+# Data files the installed package loads at run time; without these the wheel
+# ships code only and `spectra report` dies on a FileNotFoundError.
+[tool.setuptools.package-data]
+adascope = ["rules/*.json", "profiles/*.json"]

@@ -18,7 +18,7 @@ from .model import Quality, ReferenceModel
 
 def default_profile_path() -> Path:
     """The architecture profile shipped with the package."""
-    return Path(__file__).resolve().parent.parent / "profiles" / "sm89.json"
+    return Path(__file__).resolve().parent / "profiles" / "sm89.json"
 
 
 def load_profile(path: str | Path | None = None) -> dict:
