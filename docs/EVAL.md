@@ -83,8 +83,8 @@ One fixture `Run` carrying the counter values already recorded in `docs/MILESTON
 `tokens_predicted_total` 65329, `tokens_predicted_seconds_total` 598.824419,
 `draft_tokens_total` 65850, `draft_accepted_tokens_total` 43693, and the artifact's measured
 18210531328 bytes. Assert the derived decode rate (109.1 tok/s), the speculative factor
-(1 + 43693/65850, about 1.663 by that ratio and 1.97 by the milestone's stated ratio -- the
-discrepancy between those two numbers is itself a finding to resolve), the pre-speculation
+(disputed at writing: about 1.663 by 1 + accepted/drafted against 1.97 by the milestone's
+stated ratio; resolved 2026-11-16, see below), the pre-speculation
 ceiling (55.4 tok/s) and the rendered report's byte stability.
 
 That fixture already contains a contradiction that E0 must resolve before any later stage is
@@ -100,6 +100,19 @@ What it decides: whether the arithmetic and the report hold, and which speculati
 real one. It cannot separate H1, H2 and H3, and it must not be presented as if it does. It is the
 fixture every later stage reuses, and it is the only stage that can run in the machine's current
 state.
+
+**Resolved, 2026-11-16.** No choice between 1.6635 and 1.97 was needed, because both are
+wrong in the same way: neither counts rounds. Every decode round commits exactly
+`1 + accepted_i` tokens, so over the window `committed = rounds + accepted` and the factor
+is `committed / (committed - accepted)`, exact algebra with no assumption about how many
+drafts a round carries. From the fixture's own counters that is
+`65329 / (65329 - 43693) = 3.0195`, a ceiling of 167.13 tok/s, and an objective ratio of
+0.6527, below 1.0. The model is consistent on the recorded run, and the roof rule stays
+quiet. `1.6635` (1 + accepted/drafted) treats drafted tokens as rounds, which holds only
+for one draft per round; `1.97` is 109.1 / 55.353, the factor implied by the rate the model
+is meant to predict. The code now derives the factor this way (`adascope/analyze.py`), the
+roof rule applies on `0.9 <= objective_ratio <= 1.0`, and E0 passes without a GPU or a
+server in `tests/test_analyze.py::test_recorded_counters_reproduce_e0`.
 
 ### E1. Control. One variable: none. Needs the engine up and the card free.
 
@@ -162,7 +175,7 @@ counter readings recorded in `docs/MILESTONE-1.md`. Nothing else here is taken o
 | A6 | Stability | Coefficient of variation of `spec_tokens_per_forward` across the 5 control repetitions is at most 5 percent, else the ceiling is not an identifiable quantity and the result is inconclusive | eval |
 | A7 | No silent estimate | Every report line carries a measured, derived or hypothesis label; a series absent from the run is reported unavailable, never estimated | `tests/test_report.py` |
 | A8 | Inconclusive is recorded | When A5 or A6 fails, or two rules tie, the eval record's verdict is `inconclusive`, and no acceptance test counts it as a pass | eval |
-| A9 | Model self-consistency | `objective_ratio` computed from the run's own counters must not exceed 1.0. If it does, the report must say the reference model under-predicts and must not fire a near-roof claim. Verified inputs: pre-speculation ceiling 55.353 tok/s; factor from counters 1.6635 gives 92.08; the recorded rate 109.1 gives a ratio of 1.185 | `tests/test_analyze.py`, `tests/test_report.py` |
+| A9 | Model self-consistency | `objective_ratio` computed from the run's own counters must not exceed 1.0. If it does, the report must say the reference model under-predicts and must not fire a near-roof claim. Verified inputs (resolved 2026-11-16): the recorded counters give factor 3.0195, ceiling 167.13, ratio 0.6527, consistent; a 60 tok/s run with no draft counters sits at ratio 1.084 against the 55.353 ceiling and must print the under-prediction note with no roof rule fired | `tests/test_analyze.py`, `tests/test_report.py` |
 
 A4 and A5 pair deliberately. A4 alone can be satisfied by a rule that fires because one ratio
 crossed a threshold, which is arithmetic, not diagnosis. A5 is what makes the claim causal: the
@@ -310,8 +323,11 @@ no ceiling can be stated on this workload, which is a finding worth publishing.
 
 This is already the largest live risk, and one case is quantified in (c): the factor from the
 draft counters (1.6635) and the factor implied by the recorded rate (1.97) disagree by about 18
-percent, and the first one puts the measured rate above its own ceiling. E0 is the cheapest place
-to settle it, and it needs no GPU.
+percent, and the first one puts the measured rate above its own ceiling. Settled 2026-11-16
+without a GPU: the factor from the counters is 3.0195 by the committed/(committed - accepted)
+algebra, the ceiling is 167.13, and the ratio is 0.6527. What remains live is the A6 half,
+the factor's coefficient of variation across fixed-configuration repetitions, which only a
+clean E1 can measure.
 
 ### 2. Is the attribution specific, or a restatement of one arithmetic comparison?
 

@@ -156,12 +156,16 @@ Worked derivation for memory-bound dense decode, model-derived and labeled as su
 ```
 weights_bytes              = artifact_bytes
 bytes_per_forward          = weights_bytes + kv_read_bytes(context)
-tokens_per_forward         = 1 + speculative_accepted_tokens
+tokens_per_forward         = committed_tokens / decode_rounds
 ceiling_tokens_per_sec     = (mem_bandwidth_measured / bytes_per_forward)
                              * tokens_per_forward
 ```
 
 On the test machine, `weights_bytes = 17 GB` and the documented bandwidth is 1008 GB/s, so the memory-bound pre-speculation ceiling is about 59 tokens/sec. The artifact size is measured. The bandwidth is documented. The ceiling is derived. None of it is a benchmark result.
+
+The `tokens_per_forward` term is exact algebra, not an assumption. Every decode round commits `1 + accepted_i` tokens, so over a window `committed = rounds + accepted` and the factor is `committed / (committed - accepted)`. The engine's counters carry committed and accepted directly, and an engine that publishes a rounds counter (llama.cpp's `spec_decode_num_drafts_total`) substitutes `committed / rounds` for the subtraction. Two numbers this project once carried are both wrong, and the recorded run is what settled it (docs/EVAL.md, E0, resolved 2026-11-16): `1.97` was the rate back-solved from the pre-speculation ceiling, and `1.6635` (`1 + accepted/drafted`) treats drafted tokens as rounds, which holds only for one draft per round. The recorded run gives `65329 / (65329 - 43693) = 3.0195`, a ceiling of 167.13 tok/s, and an objective ratio of 0.6527.
+
+The model's limits. The ceiling covers dense decode only; the per-forward byte cost counts weights alone, so `kv_read_bytes` is zero in Phase 1 and a long-context run reads below a ceiling that did not price the KV read. Power, clock, compute, and host-side cost are not modeled: a capped card can read the weights at full bandwidth and still lose tokens. The token counters are assumed stable inside the window, which A6 in docs/EVAL.md checks. When the observed rate exceeds the derived ceiling (objective ratio above 1.0), the model under-predicts this run; the report says so, and the near-roof rule does not fire. A ratio above 1.0 is a model defect to fix, not a performance finding.
 
 ### Hypothesis, Experiment, Finding
 
