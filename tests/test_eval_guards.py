@@ -87,6 +87,7 @@ class EvalPowerLimitGuardTest(unittest.TestCase):
 
     def test_e1_all_inconclusive_is_not_a_pass(self):
         """A8: five inconclusive repetitions must not become confirmed."""
+        ev.power_limit_w = lambda: 450.0
         ev.run_repetition = lambda *a: {
             "stage": "E1", "repetition": 1, "seeded_cause": ev.SEEDED_RULE,
             "variable": {}, "top_rule_id": None, "verdict": "inconclusive",

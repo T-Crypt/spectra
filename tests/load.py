@@ -13,6 +13,7 @@ did not.
 from __future__ import annotations
 
 import json
+import time
 import urllib.request
 
 PROMPT = "Write one paragraph about memory bandwidth in GPU inference."
@@ -54,12 +55,22 @@ def stream_completion(host: str, port: int, model: str, max_tokens: int = MAX_TO
 
 
 def drive_decode(host: str, port: int, model: str, stop, max_tokens: int = MAX_TOKENS) -> dict:
-    """Keep one completion in flight until ``stop`` is set. Returns the last reply."""
+    """Keep one completion in flight until ``stop`` is set. Returns the last reply.
+
+    A failed request sleeps one second and retries: the first failure used to
+    end the thread, which left a full repetition with power draw and no
+    completed requests, and nothing said why. ``drive_errors`` counts the
+    failures so a repetition with errors says so.
+    """
     last: dict = {}
+    errors = 0
     while not stop.is_set():
         try:
             last = stream_completion(host, port, model, max_tokens=max_tokens, timeout_s=120.0)
         except Exception as exc:  # a dead engine must not take the eval down
-            last = {"error": str(exc)}
-            return last
+            errors += 1
+            last = {"error": str(exc), "drive_errors": errors}
+            time.sleep(1.0)
+    if errors:
+        last = dict(last, drive_errors=errors)
     return last

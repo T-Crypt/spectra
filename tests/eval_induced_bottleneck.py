@@ -59,7 +59,7 @@ LABEL_WIDTH = 13
 
 
 def _nvidia_smi(*args: str) -> str:
-    return subprocess.run(["nvidia-smi", *args], capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["nvidia-smi", *args], capture_output=True, text=True, timeout=30).stdout.strip()
 
 
 def gpu_free_bytes() -> int | None:
@@ -85,8 +85,14 @@ def power_limit_w() -> float | None:
 
 def set_power_limit(watts: int) -> tuple[bool, str]:
     """Try to write the power limit. Privileged, so it uses sudo -n."""
-    result = subprocess.run(["sudo", "-n", "nvidia-smi", "-pl", str(watts)],
-                            capture_output=True, text=True)
+    try:
+        value = int(watts)
+    except (TypeError, ValueError):
+        return False, f"invalid power limit value: {watts!r}"
+    if value <= 0 or value > 10000:
+        return False, f"power limit out of safe range: {value}"
+    result = subprocess.run(["sudo", "-n", "nvidia-smi", "-pl", str(value)],
+                            capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         return False, (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
     return True, result.stdout.strip()

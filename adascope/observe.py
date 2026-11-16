@@ -28,6 +28,8 @@ def parse_target(target: str) -> tuple[str, int]:
     host, sep, port_text = target.rpartition(":")
     if not sep or not host or not port_text.isdigit():
         raise ValueError(f"target must be HOST:PORT, got {target!r}")
+    if any(ch in host for ch in "/?# \t\r\n"):
+        raise ValueError(f"host contains unsafe characters in target {target!r}")
     port = int(port_text)
     if not 1 <= port <= 65535:
         raise ValueError(f"port out of range in target {target!r}")

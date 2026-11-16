@@ -1,13 +1,33 @@
 [build-system]
 requires = ["setuptools>=61.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "spectra"
 version = "0.1.0"
 description = "Architecture-aware GPU performance diagnosis and optimization"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Trevin Tindall", email = "trevintindall@gmail.com" }]
+keywords = ["gpu", "performance", "diagnosis", "nvidia", "inference", "profiling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Monitoring",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/T-Crypt/spectra"
+Repository = "https://github.com/T-Crypt/spectra"
+Issues = "https://github.com/T-Crypt/spectra/issues"
 
 [project.scripts]
 spectra = "adascope.cli:main"
