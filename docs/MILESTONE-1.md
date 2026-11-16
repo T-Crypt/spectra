@@ -43,7 +43,7 @@ Driver note, 2026-10-15: `nvidia-smi` now reports 615.78.08 for the driver, with
 | Nsight | not installed | `command -v ncu nsys` |
 | NVML library | `libnvidia-ml.so.1` loads | `ctypes` probe |
 
-The observed 109.1 tok/s sits above the 55.4 tok/s ceiling because speculative decoding produces more than one token per weight read. The ratio, about 1.97, is the speculative factor the reference model must carry. This is the first real thing the milestone has to get right.
+The observed 109.1 tok/s sits above the 55.4 tok/s ceiling because speculative decoding produces more than one token per weight read. The ratio, about 1.97, is the speculative factor the reference model must carry. This is the first real thing the milestone has to get right. (Resolved 2026-11-16: 1.97 is the rate back-solved from the pre-speculation ceiling, not a measurement. The factor from the recorded counters is `committed / (committed - accepted) = 3.0195`, exact algebra. See docs/EVAL.md, E0, and docs/DESIGN.md, Reference model.)
 
 ## Type spec for Phase 1
 

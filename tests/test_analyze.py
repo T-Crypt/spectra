@@ -42,6 +42,16 @@ class AnalyzeTest(unittest.TestCase):
         ranked = hypotheses_from_run(run, profile(), rules())
         self.assertEqual([h.rules[0] for h in ranked], [])
 
+    def test_rounds_counter_wins_over_the_subtraction(self):
+        # llama.cpp publishes spec_decode_num_drafts_total, stored as
+        # draft_rounds_total. The factor must read committed/rounds, and the
+        # fixture carries no accepted counter, so the subtraction path cannot
+        # stand in if the code takes it.
+        facts = facts_from_run(fixtures.rounds_counter_run(), profile())
+        self.assertAlmostEqual(facts["spec_tokens_per_forward"], 120.0 / 32.0, places=6)
+        self.assertEqual(facts["spec_method"],
+                         "committed/draft_rounds_total: tokens per decode forward pass")
+
     def test_inconsistent_run_is_flagged(self):
         # A9: a run whose own counters exceed the ceiling it derived.
         facts = facts_from_run(fixtures.inconsistent_run(), profile())
@@ -162,6 +172,28 @@ class AnalyzeTest(unittest.TestCase):
         self.assertAlmostEqual(facts["objective_ratio"], 0.6527, delta=0.003)
         self.assertEqual([h.rules[0] for h in hypotheses_from_run(
             fixtures.jsonl_only_run(), profile(), rules())], [])
+
+    def test_co_tenant_rule_fires_measured(self):
+        # RESEARCH.md section 6: record the contention, do not recompute it.
+        run = fixtures.contended_run()
+        facts = facts_from_run(run, profile())
+        self.assertTrue(facts["co_tenant"])
+        hyps = rank(hypotheses_from_run(run, profile(), rules()))
+        fired = [h for h in hyps if "sm89.gpu-co-tenant" in h.rules]
+        self.assertEqual(len(fired), 1)
+        self.assertIn("contaminated", fired[0].claim)
+        self.assertIs(fired[0].confidence, Quality.MEASURED)
+        obs = {o.metric: o for o in observations_from_run(run)}
+        self.assertIn("gpu_process_count", obs)
+        self.assertEqual(obs["gpu_process_count"].value, 2.0)
+
+    def test_a_single_process_on_the_card_is_no_co_tenant(self):
+        run = fixtures.recorded_run(with_requests=False)
+        run.series.append(fixtures._flat("gpu_process_count", 1.0, "count", "nvml"))
+        self.assertFalse(facts_from_run(run, profile())["co_tenant"])
+        fired = [h for h in hypotheses_from_run(run, profile(), rules())
+                 if "sm89.gpu-co-tenant" in h.rules]
+        self.assertEqual(fired, [])
 
 
 if __name__ == "__main__":

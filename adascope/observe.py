@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .adapters.lmcompat import LmCompat, parse_jsonl, strip_known_prefix
+from .adapters.engines import ENGINE_IDS, canonical_name, detect_engine
+from .adapters.lmcompat import LmCompat, parse_jsonl
 from .adapters.nvml import Nvml
+from .bench import build_prompt, driver_series, start_driver, validate_load
 from .model import Quality, Run, Series
 from .store import save_run
 
@@ -130,12 +133,23 @@ def observe(
     jsonl_path: str | None = None,
     out: str | Path = "runs",
     config_file: str | None = None,
+    engine: str = "auto",
+    load: dict | None = None,
 ) -> Path:
-    """Sample NVML and the engine for duration_s and store one Run."""
+    """Sample NVML and the engine for duration_s and store one Run.
+
+    With ``load`` set, the first-party driver keeps the configured
+    concurrency of completions in flight for the whole window, so the run
+    carries the workload that produced it.
+    """
     host, port = parse_target(target)
     sampling = parse_sampling(duration_s, hz)
     interval = sampling["interval_ms"] / 1000.0
     duration_s = sampling["duration_s"]
+
+    if engine != "auto" and engine not in ENGINE_IDS:
+        raise ValueError(f"unknown engine {engine!r}; expected auto or one of {', '.join(ENGINE_IDS)}")
+    load_cfg = validate_load(load) if load else None
 
     merged_config: dict = dict(config or {})
     if config_file:
@@ -151,7 +165,22 @@ def observe(
         model_id = str(models[0].get("id", "unknown")) if models else "unknown"
     except Exception:
         model_id = "unknown"
-    workload = client.workload(model_id, merged_config, artifact_path, jsonl_path)
+    if engine == "auto":
+        # One fetch decides the name table. A dead /metrics leaves the
+        # detection at its default and the loop keeps trying, so an engine
+        # that answers late still gets observed.
+        try:
+            probe = set(client.metrics())
+        except Exception:
+            probe = set()
+        engine_id, _basis = detect_engine(probe)
+    else:
+        engine_id = engine
+    if load_cfg:
+        # Declared driver parameters, part of the workload fingerprint.
+        merged_config["driver"] = {"id": "spectra-bench", **load_cfg}
+    workload = client.workload(model_id, merged_config, artifact_path, jsonl_path,
+                               engine_id=engine_id)
 
     count = max(1, round(duration_s * hz))
     hw_accum: dict[str, list[tuple[float, float]]] = {}
@@ -162,6 +191,23 @@ def observe(
     started = _utc_now()
     wall_start = time.monotonic()
     start_ms = int(time.time() * 1000)
+
+    driver_stop = None
+    driver_threads: list = []
+    driver_events: list[tuple[float, str]] = []
+    driver_lock = threading.Lock()
+    env_snapshot: dict | None = None
+    if load_cfg:
+        prompt, _prompt_words = build_prompt(load_cfg["prompt_words"])
+
+        def record(offset: float, kind: str) -> None:
+            with driver_lock:
+                driver_events.append((offset, kind))
+
+        driver_stop, driver_threads = start_driver(
+            host, port, model_id, prompt, load_cfg["completion_tokens"],
+            load_cfg["concurrency"], record, wall_start)
+
     for i in range(count):
         tick_start = time.monotonic()
         elapsed = tick_start - wall_start
@@ -172,6 +218,23 @@ def observe(
             hw_failure = str(exc)
         if sample:
             hw_samples += 1
+        # Co-tenant recording: who else is on the card, this tick. A failure
+        # of the enumerator must not kill the run; the series is simply
+        # shorter and the report says what it could not record.
+        try:
+            procs = Nvml.processes()
+        except Exception:
+            procs = None
+        if procs is not None:
+            hw_accum.setdefault("gpu_process_count", []).append((elapsed, float(len(procs))))
+            hw_accum.setdefault("gpu_process_memory_bytes", []).append(
+                (elapsed, float(sum(p["used_gpu_memory_bytes"] for p in procs))))
+            if env_snapshot is None:
+                env_snapshot = {
+                    "gpu_processes": sorted(
+                        procs, key=lambda p: -p["used_gpu_memory_bytes"]),
+                    "gpu_processes_method": Nvml.processes_method(),
+                }
         for key, value in sample.items():
             if isinstance(value, bool):
                 point = (elapsed, 1.0 if value else 0.0)
@@ -186,10 +249,14 @@ def observe(
         except Exception:
             metrics = {}
         for key, value in metrics.items():
-            eng_accum.setdefault(strip_known_prefix(key), []).append((elapsed, float(value)))
+            eng_accum.setdefault(canonical_name(engine_id, key), []).append((elapsed, float(value)))
         wait = interval - (time.monotonic() - tick_start)
         if wait > 0 and i < count - 1:
             time.sleep(wait)
+    if driver_stop is not None:
+        driver_stop.set()
+        for thread in driver_threads:
+            thread.join(timeout=5.0)
     end_ms = int(time.time() * 1000)
     ended = _utc_now()
 
@@ -212,11 +279,18 @@ def observe(
         request_series = _request_series(parse_jsonl(jsonl_path), start_ms, end_ms)
     series.extend(request_series)
 
+    bench_series: list[Series] = []
+    if load_cfg:
+        bench_series = driver_series(driver_events)
+        series.extend(bench_series)
+
     sources = ["nvml"]
     if eng_samples:
         sources.append("lmcompat")
     if request_series:
         sources.append(JSONL_SOURCE)
+    if bench_series:
+        sources.append("bench")
 
     run_id = f"run-{started.replace(':', '').replace('-', '')}"
     run = Run(
@@ -229,6 +303,7 @@ def observe(
         sources=sources,
         artifacts=[jsonl_path] if jsonl_path else [],
         series=series,
+        environment=dict(env_snapshot) if env_snapshot is not None else {},
     )
     dest = Path(out)
     if dest.suffix == ".json":

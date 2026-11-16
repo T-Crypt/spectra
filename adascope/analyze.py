@@ -40,6 +40,7 @@ CONFIDENCE_WEIGHT = {
 }
 
 SPEC_ROUND_METHOD = "committed/(committed-accepted): tokens per decode forward pass"
+SPEC_ROUNDS_METHOD = "committed/draft_rounds_total: tokens per decode forward pass"
 SPEC_NONE_METHOD = "no draft counters; no speculation assumed"
 SPEC_JSONL_METHOD = "tokens/rounds from the request log: tokens per decode round"
 REQUEST_RATE_METHOD = "delta(request_decode_tokens)/delta(request_decode_seconds), token-weighted"
@@ -103,13 +104,22 @@ def spec_tokens_per_forward(by_metric: dict[str, list[tuple[float, float]]]) -> 
     Every decode round commits ``1 + accepted_i`` tokens, so
     ``committed = sum(accepted_i + 1) = accepted + rounds`` and
     ``rounds = committed - accepted``. Tokens per forward pass is therefore
-    ``committed / (committed - accepted)``.
+    ``committed / (committed - accepted)``. An engine that publishes a rounds
+    counter (llama.cpp's ``spec_decode_num_drafts_total``, stored as
+    ``draft_rounds_total``) gives the rounds directly, and
+    ``committed / rounds`` replaces the subtraction. A rounds counter that
+    disagrees with committed (more rounds than committed tokens) is
+    inconsistent data and falls through to the next source rather than
+    dividing into nonsense.
 
     The alternative seen in the predecessor code, ``1 + accepted / drafted``,
     divides accepted drafts by drafted tokens instead of by rounds, and it puts
     the recorded rate above the ceiling it implies; see docs/EVAL.md A9.
     """
     committed = _delta(_steady(by_metric.get("tokens_predicted_total", [])))
+    rounds = _delta(_steady(by_metric.get("draft_rounds_total", [])))
+    if rounds and committed is not None and 0 < rounds <= committed:
+        return committed / rounds, SPEC_ROUNDS_METHOD
     accepted = _delta(_steady(by_metric.get("draft_accepted_tokens_total", [])))
     if not accepted or committed is None or accepted >= committed:
         return 1.0, SPEC_NONE_METHOD
@@ -196,6 +206,12 @@ def facts_from_run(run: Run, profile: dict) -> dict:
     temps = _steady(series.get("temp_c", []))
     temp_c = max((v for _, v in temps), default=0.0)
 
+    # Co-tenant presence over the whole run, not just the steady window:
+    # a second process that left early still spent its memory and clock
+    # cost on the window that was kept.
+    process_counts = series.get("gpu_process_count", [])
+    co_tenant = bool(process_counts) and max(v for _, v in process_counts) >= 2
+
     facts: dict = {
         "power_ratio": power_ratio,
         "temp_c": temp_c,
@@ -210,6 +226,7 @@ def facts_from_run(run: Run, profile: dict) -> dict:
         "spec_tokens_per_forward": spec_factor,
         "spec_method": spec_method,
         "spec_acceptance_ratio": acceptance,
+        "co_tenant": co_tenant,
         "steady_window": _span(power),
     }
     for key, points in series.items():
@@ -263,6 +280,11 @@ def observations_from_run(run: Run) -> list[Observation]:
         out.append(Observation(run.id, "temp_max_c", max(v for _, v in temps), "C", _span(temps),
                                "against the 83 C throttle point",
                                "max over the steady window (first 10 percent dropped)", ["temp_c"]))
+    counts = series.get("gpu_process_count", [])
+    if counts:
+        out.append(Observation(run.id, "gpu_process_count", max(v for _, v in counts), "count",
+                               _span(counts), "against 1, the engine alone",
+                               "max over the window", ["gpu_process_count"]))
     return out
 
 

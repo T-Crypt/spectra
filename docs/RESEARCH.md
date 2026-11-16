@@ -250,6 +250,17 @@ question, Spectra must consume the answer, not rebuild it.
 The honest conclusion: for a single run of a single engine, Spectra currently adds nothing that
 the engine does not already publish. What it can add is memory, comparability and attribution.
 
+> **Update 2026-11-16.** The contention row above is now implemented, not just specified:
+> `observe` enumerates the card's compute processes every tick (`Nvml.processes()`),
+> stores a first-tick snapshot in `Run.environment`, and the report prints the list.
+> A second process on the card fires the `sm89.gpu-co-tenant` rule at measured
+> confidence. One correction to this section's finding: the NVML process
+> enumerator needs root on this driver (NVML error 7), unlike the sample
+> calls; the unprivileged path falls back to the same table from
+> `nvidia-smi`, and the run records which enumerator produced the list
+> (`gpu_processes_method`). What was not implemented: the comparability
+> rows, which stay open.
+
 ## 8. Candidate differentiators
 
 Each entry is a research direction, not an established result, and each states what would falsify

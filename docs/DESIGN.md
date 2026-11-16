@@ -125,6 +125,9 @@ Run
   sources: [adapter_id]
   artifacts: [jsonl_path, log_path, ppm_or_other]
   series: [Series]
+  environment: {gpu_processes: [{pid, used_gpu_memory_bytes, process_name}]}
+              # first-tick snapshot of the card's compute processes,
+              # recorded not recomputed; absent in runs stored earlier
 
 Series
   run_id, metric, unit, source, quality: measured | derived
@@ -156,12 +159,16 @@ Worked derivation for memory-bound dense decode, model-derived and labeled as su
 ```
 weights_bytes              = artifact_bytes
 bytes_per_forward          = weights_bytes + kv_read_bytes(context)
-tokens_per_forward         = 1 + speculative_accepted_tokens
+tokens_per_forward         = committed_tokens / decode_rounds
 ceiling_tokens_per_sec     = (mem_bandwidth_measured / bytes_per_forward)
                              * tokens_per_forward
 ```
 
 On the test machine, `weights_bytes = 17 GB` and the documented bandwidth is 1008 GB/s, so the memory-bound pre-speculation ceiling is about 59 tokens/sec. The artifact size is measured. The bandwidth is documented. The ceiling is derived. None of it is a benchmark result.
+
+The `tokens_per_forward` term is exact algebra, not an assumption. Every decode round commits `1 + accepted_i` tokens, so over a window `committed = rounds + accepted` and the factor is `committed / (committed - accepted)`. The engine's counters carry committed and accepted directly, and an engine that publishes a rounds counter (llama.cpp's `spec_decode_num_drafts_total`) substitutes `committed / rounds` for the subtraction. Two numbers this project once carried are both wrong, and the recorded run is what settled it (docs/EVAL.md, E0, resolved 2026-11-16): `1.97` was the rate back-solved from the pre-speculation ceiling, and `1.6635` (`1 + accepted/drafted`) treats drafted tokens as rounds, which holds only for one draft per round. The recorded run gives `65329 / (65329 - 43693) = 3.0195`, a ceiling of 167.13 tok/s, and an objective ratio of 0.6527.
+
+The model's limits. The ceiling covers dense decode only; the per-forward byte cost counts weights alone, so `kv_read_bytes` is zero in Phase 1 and a long-context run reads below a ceiling that did not price the KV read. Power, clock, compute, and host-side cost are not modeled: a capped card can read the weights at full bandwidth and still lose tokens. The token counters are assumed stable inside the window, which A6 in docs/EVAL.md checks. When the observed rate exceeds the derived ceiling (objective ratio above 1.0), the model under-predicts this run; the report says so, and the near-roof rule does not fire. A ratio above 1.0 is a model defect to fix, not a performance finding.
 
 ### Hypothesis, Experiment, Finding
 
@@ -243,12 +250,17 @@ lmcompat(Adapter)
 
 nvml(Adapter)
   reads power, clocks, temperature, vram, utilization, throttle reasons
+  enumerates the card's compute processes (pid, memory, name)
+  the observer stores a first-tick snapshot in Run.environment and the
+  report prints it; a second process on the card flags the run contended
 
 nsys(Adapter) / ncu(Adapter)
   Phase 3+, optional, import only
 ```
 
-`nimfer` is an instance of `lmcompat`, not a special case in the core.
+`ninfer` is an instance of `lmcompat`, not a special case in the core.
+
+Engine name table. The analyser reads a fixed set of canonical series names (`tokens_predicted_total`, `tokens_predicted_seconds_total`, `draft_tokens_total`, `draft_accepted_tokens_total`, `draft_rounds_total`). Each engine writes its own names, and the table in `adascope/adapters/engines.py` maps a given engine's native names onto the canonical ones. A name the table does not know passes through unchanged, prefix stripped, so a run records what the engine emitted. `observe` detects the engine from one `/metrics` fetch (the `vllm:` prefix, the `n_decode_total` counter, or a bare `draft_tokens_total` counter) and takes `--engine` to force a table. An engine outside the table degrades honestly: vLLM publishes `generation_tokens_total` but no decode-seconds counter, so a vLLM run takes its decode rate from the wall-window fallback in the analyser, and with no draft counters the speculative factor stays at the no-speculation default.
 
 ## Milestone 1. The walking skeleton
 
@@ -265,12 +277,15 @@ Scope, deliberately narrow:
 
 Not in scope for milestone 1: applying changes, the controlled runner, kernel traces, the AI layer, end-to-end automation of the engine.
 
-Proposed CLI:
+CLI:
 
 ```
 spectra observe --target 127.0.0.1:5804 --duration 120 --hz 2 --out runs/<id>.json
+spectra bench   --target 127.0.0.1:5804 --duration 120 --hz 2 --prompt-words 256 --completion-tokens 256 --concurrency 1
 spectra report runs/<id>.json
 ```
+
+`bench` is `observe` plus the first-party driver in `adascope/bench.py`: it keeps the configured concurrency of greedy completions in flight for the whole window and records the workload in the run. The declared parameters go into `workload.config.driver`; the completed and failed counts are measured series (`driver_requests_completed`, `driver_requests_failed`), so a window in which the load did not materialise says so in the run instead of producing a quiet rate.
 
 ### Acceptance tests
 

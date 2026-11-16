@@ -115,6 +115,15 @@ class ReportTest(unittest.TestCase):
         self.assertNotIn("Basis: decode_rate_tok_s", text)
         self.assertEqual(unlabeled_lines(text), [], text)
 
+    def test_co_tenant_report_prints_the_recorded_processes(self):
+        text = render(fixtures.contended_run(), profile(), rules())
+        self.assertIn("GPU processes:  2", text)
+        self.assertIn("pid 1293313", text)
+        self.assertIn("python3.13", text)
+        self.assertIn("sm89.gpu-co-tenant", text)
+        self.assertIn("contaminated", text)
+        self.assertEqual(unlabeled_lines(text), [])
+
     def test_golden_file_matches(self):
         self.assertEqual(load_run(FIXTURE_RUN), fixtures.recorded_run())
         self.assertEqual(render(load_run(FIXTURE_RUN), profile(), rules()), GOLDEN.read_text(encoding="utf-8"))

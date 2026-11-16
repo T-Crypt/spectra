@@ -5,7 +5,6 @@ from adascope.adapters.lmcompat import (
     LmCompat,
     parse_jsonl_lines,
     parse_metrics_text,
-    strip_known_prefix,
 )
 from tests.fixtures import machine
 from tests.support import engine_available, engine_down_reason
@@ -43,12 +42,6 @@ class PrometheusParserTest(unittest.TestCase):
         self.assertEqual(parsed["ninfer:draft_accepted_tokens_total"], 43693)
         self.assertNotIn("tokens_predicted_total", parsed)
         self.assertNotIn("draft_accepted_tokens_total", parsed)
-
-    def test_strip_known_prefix(self):
-        self.assertEqual(strip_known_prefix("llamacpp:tokens_predicted_total"), "tokens_predicted_total")
-        self.assertEqual(strip_known_prefix("ninfer:draft_tokens_total"), "draft_tokens_total")
-        self.assertEqual(strip_known_prefix("power_draw_w"), "power_draw_w")
-
 
 class JsonlReaderTest(unittest.TestCase):
     def test_v20_records_are_read_and_junk_is_ignored(self):
@@ -138,10 +131,13 @@ class LmCompatLiveTest(unittest.TestCase):
             first["llamacpp:tokens_predicted_seconds_total"],
         )
 
-    def test_models_lists_ninfer_model(self):
+    def test_models_lists_a_model(self):
+        # Which model the engine slot holds changes with llama-swap; the
+        # contract under test is that /v1/models answers with at least one
+        # non-empty id, not a particular model.
         client = LmCompat(HOST, PORT)
         ids = [str(m.get("id", "")) for m in client.models()]
-        self.assertTrue(any("NInfer" in mid for mid in ids), ids)
+        self.assertTrue(any(mid for mid in ids), ids)
 
 
 if __name__ == "__main__":

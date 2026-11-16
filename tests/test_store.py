@@ -29,6 +29,13 @@ class StoreTest(unittest.TestCase):
         loaded = load_run(path)
         self.assertEqual(loaded, run)
 
+    def test_environment_round_trips(self):
+        run = make_run()
+        run.environment = {"gpu_processes": [
+            {"pid": 7, "used_gpu_memory_bytes": 123, "process_name": ""}]}
+        path = save_run(run, self.dir)
+        self.assertEqual(load_run(path), run)
+
     def test_save_twice_one_file_identical_bytes(self):
         run = make_run()
         p1 = save_run(run, self.dir)

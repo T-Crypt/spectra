@@ -8,7 +8,8 @@ here. Everything downstream trusts the types.
 from __future__ import annotations
 
 import ctypes
-from ctypes import byref, c_int, c_uint, c_ulonglong, create_string_buffer
+import subprocess
+from ctypes import byref, c_char, c_int, c_uint, c_ulonglong, create_string_buffer
 
 from ..model import HardwareProfile
 
@@ -35,6 +36,24 @@ class _Utilization(ctypes.Structure):
 
 class _Memory(ctypes.Structure):
     _fields_ = [("total", c_ulonglong), ("free", c_ulonglong), ("used", c_ulonglong)]
+
+
+class _ProcessInfo(ctypes.Structure):
+    """nvmlProcessInfo_t, shaped for the v2 enumerator.
+
+    The leading fields are fixed by the ABI; ``processName`` is the last
+    field in the driver's struct and is declared wider than the driver
+    writes so an older driver's smaller buffer can never overrun the
+    allocation. The name is empty on drivers that predate it.
+    """
+
+    _fields_ = [
+        ("pid", c_uint),
+        ("usedGpuMemory", c_ulonglong),
+        ("gpuInstanceId", c_int),
+        ("computeInstanceId", c_int),
+        ("processName", c_char * 256),
+    ]
 
 
 def _check(rc: int, call: str) -> None:
@@ -165,6 +184,90 @@ class Nvml:
         }
         out.update(_decode_throttle(reasons.value))
         return out
+
+    @staticmethod
+    def processes(device_index: int = 0) -> list[dict]:
+        """The compute processes on the device, one dict each.
+
+        Each dict carries ``pid``, ``used_gpu_memory_bytes`` and
+        ``process_name`` (empty string on drivers that do not report it).
+        This is the read-only answer to ``nvidia-smi --query-compute-apps``:
+        it names who is on the card, it does not say which one is the
+        engine. The observer stores the list in the run's environment and
+        the report prints it.
+
+        The NVML enumerator needs root on this driver (NVML error 7), so the
+        unprivileged path falls back to the same table from nvidia-smi. Which
+        path produced the list is what ``processes_method()`` reports, and
+        the observer records it in the run.
+        """
+        lib = _load()
+        dev = _handle(lib, device_index)
+        count = c_uint(0)
+        lib.nvmlDeviceGetComputeRunningProcesses_v2.restype = c_int
+        try:
+            _check(lib.nvmlDeviceGetComputeRunningProcesses_v2(dev, byref(count), None),
+                   "nvmlDeviceGetComputeRunningProcesses_v2(count)")
+            if count.value == 0:
+                Nvml._processes_method = "nvml"
+                return []
+            infos = (_ProcessInfo * count.value)()
+            _check(lib.nvmlDeviceGetComputeRunningProcesses_v2(dev, byref(count), infos),
+                   "nvmlDeviceGetComputeRunningProcesses_v2")
+        except RuntimeError as exc:
+            if "code 7" not in str(exc):
+                raise
+            Nvml._processes_method = "nvidia-smi"
+            return _processes_from_nvidia_smi()
+        Nvml._processes_method = "nvml"
+        out = []
+        for info in infos[:count.value]:
+            name = info.processName.decode("utf-8", errors="replace").split("\0")[0]
+            out.append({
+                "pid": info.pid,
+                "used_gpu_memory_bytes": info.usedGpuMemory,
+                "process_name": name,
+            })
+        return out
+
+    @staticmethod
+    def processes_method() -> str:
+        """Which enumerator produced the last ``processes()`` call."""
+        return Nvml._processes_method
+
+    _processes_method: str = "unknown"
+
+    @staticmethod
+    def shutdown() -> None:
+        """Release NVML for this process. The next call re-initialises it."""
+        global _lib
+        if _lib is not None:
+            _lib.nvmlShutdown()
+            _lib = None
+
+
+def _processes_from_nvidia_smi() -> list[dict]:
+    """The compute-apps table from nvidia-smi, the unprivileged path.
+
+    Same table the NVML enumerator serves, through the CLI that needs no
+    root. Memory arrives in MiB and is converted to bytes here, at the
+    boundary, like every other unit conversion in this adapter.
+    """
+    out = subprocess.run(
+        ["nvidia-smi", "--query-compute-apps=pid,process_name,used_memory",
+         "--format=csv,noheader,nounits"],
+        capture_output=True, text=True, check=True)
+    procs = []
+    for line in out.stdout.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != 3 or not parts[0].isdigit():
+            continue
+        procs.append({
+            "pid": int(parts[0]),
+            "used_gpu_memory_bytes": int(parts[2]) * 1024 * 1024,
+            "process_name": parts[1],
+        })
+    return procs
 
     @staticmethod
     def shutdown() -> None:
