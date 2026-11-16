@@ -6,7 +6,7 @@
     <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-%E2%89%A5%203.11-3776AB?logo=python&logoColor=white" alt="Python 3.11 or newer"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
     <a href="https://github.com/T-Crypt/spectra/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/T-Crypt/spectra/ci.yml?branch=master&label=ci" alt="CI status"></a>
-    <img src="https://img.shields.io/badge/tests-76%20passing-brightgreen" alt="76 tests passing">
+    <img src="https://img.shields.io/badge/tests-110%20passing-brightgreen" alt="110 tests passing">
 </p>
 
 <p align="center">
