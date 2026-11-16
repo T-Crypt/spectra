@@ -1,0 +1,19 @@
+{
+  "arch": "sm90",
+  "citations": [
+    "NVIDIA H100/RTX specs",
+    "Hopper tuning guide"
+  ],
+  "clock_mem_max_mhz": 10501,
+  "clock_sm_max_mhz": 3135,
+  "l2_bytes": 75497472,
+  "mem_bandwidth_spec_gbps": 3350,
+  "pcie_link_gen": 4,
+  "pcie_link_width": 16,
+  "sm_count": 128,
+  "throttle_semantics": {
+    "hw_thermal_slowdown": "die temperature trip",
+    "sw_power_cap": "board power limit via NVML throttle bit 0x4",
+    "sw_thermal_slowdown": "software thermal limit via NVML throttle bit 0x20"
+  }
+}
