@@ -271,12 +271,15 @@ Scope, deliberately narrow:
 
 Not in scope for milestone 1: applying changes, the controlled runner, kernel traces, the AI layer, end-to-end automation of the engine.
 
-Proposed CLI:
+CLI:
 
 ```
 spectra observe --target 127.0.0.1:5804 --duration 120 --hz 2 --out runs/<id>.json
+spectra bench   --target 127.0.0.1:5804 --duration 120 --hz 2 --prompt-words 256 --completion-tokens 256 --concurrency 1
 spectra report runs/<id>.json
 ```
+
+`bench` is `observe` plus the first-party driver in `adascope/bench.py`: it keeps the configured concurrency of greedy completions in flight for the whole window and records the workload in the run. The declared parameters go into `workload.config.driver`; the completed and failed counts are measured series (`driver_requests_completed`, `driver_requests_failed`), so a window in which the load did not materialise says so in the run instead of producing a quiet rate.
 
 ### Acceptance tests
 

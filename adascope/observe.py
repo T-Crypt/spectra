@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from pathlib import Path
 from .adapters.engines import ENGINE_IDS, canonical_name, detect_engine
 from .adapters.lmcompat import LmCompat, parse_jsonl
 from .adapters.nvml import Nvml
+from .bench import build_prompt, driver_series, start_driver, validate_load
 from .model import Quality, Run, Series
 from .store import save_run
 
@@ -132,8 +134,14 @@ def observe(
     out: str | Path = "runs",
     config_file: str | None = None,
     engine: str = "auto",
+    load: dict | None = None,
 ) -> Path:
-    """Sample NVML and the engine for duration_s and store one Run."""
+    """Sample NVML and the engine for duration_s and store one Run.
+
+    With ``load`` set, the first-party driver keeps the configured
+    concurrency of completions in flight for the whole window, so the run
+    carries the workload that produced it.
+    """
     host, port = parse_target(target)
     sampling = parse_sampling(duration_s, hz)
     interval = sampling["interval_ms"] / 1000.0
@@ -141,6 +149,7 @@ def observe(
 
     if engine != "auto" and engine not in ENGINE_IDS:
         raise ValueError(f"unknown engine {engine!r}; expected auto or one of {', '.join(ENGINE_IDS)}")
+    load_cfg = validate_load(load) if load else None
 
     merged_config: dict = dict(config or {})
     if config_file:
@@ -167,6 +176,9 @@ def observe(
         engine_id, _basis = detect_engine(probe)
     else:
         engine_id = engine
+    if load_cfg:
+        # Declared driver parameters, part of the workload fingerprint.
+        merged_config["driver"] = {"id": "spectra-bench", **load_cfg}
     workload = client.workload(model_id, merged_config, artifact_path, jsonl_path,
                                engine_id=engine_id)
 
@@ -179,6 +191,22 @@ def observe(
     started = _utc_now()
     wall_start = time.monotonic()
     start_ms = int(time.time() * 1000)
+
+    driver_stop = None
+    driver_threads: list = []
+    driver_events: list[tuple[float, str]] = []
+    driver_lock = threading.Lock()
+    if load_cfg:
+        prompt, _prompt_words = build_prompt(load_cfg["prompt_words"])
+
+        def record(offset: float, kind: str) -> None:
+            with driver_lock:
+                driver_events.append((offset, kind))
+
+        driver_stop, driver_threads = start_driver(
+            host, port, model_id, prompt, load_cfg["completion_tokens"],
+            load_cfg["concurrency"], record, wall_start)
+
     for i in range(count):
         tick_start = time.monotonic()
         elapsed = tick_start - wall_start
@@ -207,6 +235,10 @@ def observe(
         wait = interval - (time.monotonic() - tick_start)
         if wait > 0 and i < count - 1:
             time.sleep(wait)
+    if driver_stop is not None:
+        driver_stop.set()
+        for thread in driver_threads:
+            thread.join(timeout=5.0)
     end_ms = int(time.time() * 1000)
     ended = _utc_now()
 
@@ -229,11 +261,18 @@ def observe(
         request_series = _request_series(parse_jsonl(jsonl_path), start_ms, end_ms)
     series.extend(request_series)
 
+    bench_series: list[Series] = []
+    if load_cfg:
+        bench_series = driver_series(driver_events)
+        series.extend(bench_series)
+
     sources = ["nvml"]
     if eng_samples:
         sources.append("lmcompat")
     if request_series:
         sources.append(JSONL_SOURCE)
+    if bench_series:
+        sources.append("bench")
 
     run_id = f"run-{started.replace(':', '').replace('-', '')}"
     run = Run(

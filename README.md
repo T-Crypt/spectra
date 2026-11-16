@@ -55,6 +55,13 @@ spectra observe --target 127.0.0.1:5804 --duration 120 --hz 2
 spectra report runs/<id>.json
 ```
 
+Or drive the workload yourself, so the run carries it:
+
+```bash
+spectra bench --target 127.0.0.1:5804 --duration 120 --hz 2 --prompt-words 256 --completion-tokens 256 --concurrency 1
+spectra report runs/<id>.json
+```
+
 Run the tests. No GPU or server is needed:
 
 ```bash

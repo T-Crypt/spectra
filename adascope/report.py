@@ -91,6 +91,11 @@ def _unresolved_evidence(rule: dict, observations_by_id: dict, facts: dict) -> l
     return [m for m in declared if _evidence_value(m, observations_by_id, facts) is None]
 
 
+def _last(samples: list[tuple[float, float]]) -> int:
+    """The last cumulative value of a counter series, zero when absent."""
+    return int(samples[-1][1]) if samples else 0
+
+
 def _sampling(run: Run) -> str:
     sampling = run.sampling if isinstance(run.sampling, dict) else {}
     interval = sampling.get("interval_ms", "unknown")
@@ -120,6 +125,18 @@ def render(run: Run, profile: dict, rules: list[dict]) -> str:
         f"Tier:        {', '.join(run.sources) if run.sources else 'unknown'}  (measured)",
         f"Samples:     {_sampling(run)}  (measured)",
     ]
+    driver = wl.config.get("driver") if isinstance(wl.config, dict) else None
+    if isinstance(driver, dict) and driver.get("id") == "spectra-bench":
+        # The declared parameters are the operator's input, and the counts
+        # are what the driver actually finished over the whole window, so
+        # both stand under the measured label the config lines already use.
+        lines.append(
+            f"Load:        bench {driver.get('prompt_words')} prompt words, "
+            f"{driver.get('completion_tokens')} completion tokens, "
+            f"{driver.get('concurrency')} concurrent  (measured)")
+        lines.append(
+            f"Requests:      {_last(by_metric.get('driver_requests_completed', []))} completed, "
+            f"{_last(by_metric.get('driver_requests_failed', []))} failed over the window  (measured)")
 
     lines.append("")
     lines.append("Measured:  (measured)")
