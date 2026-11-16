@@ -1,0 +1,203 @@
+[
+  {
+    "id": "sm80.power-cap-limit",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "all": [
+        {
+          "ge": [
+            "power_ratio",
+            0.95
+          ]
+        },
+        {
+          "lt": [
+            "objective_ratio",
+            0.9
+          ]
+        }
+      ]
+    },
+    "claim_kind": "bounded_by",
+    "claim": "limited by the power cap",
+    "confidence_basis": [
+      {
+        "quality": "measured",
+        "when": {
+          "bool": "throttle.sw_power_cap"
+        }
+      },
+      {
+        "quality": "derived"
+      }
+    ],
+    "confidence_note": "measured when the NVML sw_power_cap bit is true in the steady window; otherwise the claim rests on the power ratio alone, which is a derived bound. The Quality enum has no supported member, so supported is carried here as prose and maps to derived.",
+    "evidence_observations": [
+      "power_draw_mean_w"
+    ],
+    "alternatives": [
+      "sm80.thermal-throttle"
+    ],
+    "citation": "NVML throttle reason bits; Ada boost behavior"
+  },
+  {
+    "id": "sm80.thermal-throttle",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "all": [
+        {
+          "ge": [
+            "temp_c",
+            83
+          ]
+        },
+        {
+          "bool": "throttle.sw_thermal_slowdown"
+        }
+      ]
+    },
+    "claim_kind": "bounded_by",
+    "claim": "limited by temperature",
+    "confidence_basis": [
+      {
+        "quality": "measured"
+      }
+    ],
+    "confidence_note": "both the temperature and the NVML bit are measured in the run",
+    "evidence_observations": [
+      "temp_max_c"
+    ],
+    "alternatives": [
+      "sm80.power-cap-limit"
+    ],
+    "citation": "NVML throttle reason bits"
+  },
+  {
+    "id": "sm80.decode-near-bandwidth-roof",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "all": [
+        {
+          "ge": [
+            "objective_ratio",
+            0.9
+          ]
+        },
+        {
+          "le": [
+            "objective_ratio",
+            1.0
+          ]
+        }
+      ]
+    },
+    "claim_kind": "bounded_by",
+    "claim": "memory bandwidth is the limit; further tuning has little headroom",
+    "confidence_basis": [
+      {
+        "quality": "derived"
+      }
+    ],
+    "confidence_note": "the ratio is derived from the run's own counters and the reference model",
+    "evidence_observations": [
+      "decode_rate_tok_s"
+    ],
+    "alternatives": [],
+    "citation": "1008 GB/s documented memory bandwidth",
+    "note": "A9: an objective_ratio above 1.0 means the run beats the ceiling derived from its own counters, so the reference model under-predicts this run and no near-roof claim is made."
+  },
+  {
+    "id": "sm80.gpu-co-tenant",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "bool": "co_tenant"
+    },
+    "claim_kind": "contended",
+    "claim": "another process was on the GPU during this run; its memory and clock cost are not attributed to the engine, so the numbers may be contaminated",
+    "confidence_basis": [
+      {
+        "quality": "measured"
+      }
+    ],
+    "confidence_note": "the process list is a direct NVML measurement of who held the card; which process is the engine and which is the co-tenant is not split here, and the report prints the recorded list",
+    "evidence_observations": [
+      "gpu_process_count"
+    ],
+    "alternatives": [],
+    "citation": "NVML nvmlDeviceGetComputeRunningProcesses"
+  },
+  {
+    "id": "sm80.host-bound",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "all": [
+        {
+          "bool": "host_exposed_available"
+        },
+        {
+          "ge": [
+            "host_exposed_ratio",
+            0.3
+          ]
+        }
+      ]
+    },
+    "claim_kind": "starved",
+    "claim": "host-side work dominates the decode window",
+    "confidence_basis": [
+      {
+        "quality": "derived"
+      }
+    ],
+    "evidence_observations": [
+      "host_exposed_ratio"
+    ],
+    "alternatives": [
+      "sm80.decode-near-bandwidth-roof"
+    ],
+    "citation": "engine host_exposed_seconds split"
+  },
+  {
+    "id": "sm80.gpu-bound",
+    "arch_scope": "sm80",
+    "applies_when": {
+      "all": [
+        {
+          "bool": "host_exposed_available"
+        },
+        {
+          "lt": [
+            "host_exposed_ratio",
+            0.1
+          ]
+        },
+        {
+          "ge": [
+            "objective_ratio",
+            0.9
+          ]
+        },
+        {
+          "le": [
+            "objective_ratio",
+            1.0
+          ]
+        }
+      ]
+    },
+    "claim_kind": "bounded_by",
+    "claim": "GPU execution is the limit, not host submission",
+    "confidence_basis": [
+      {
+        "quality": "derived"
+      }
+    ],
+    "evidence_observations": [
+      "decode_rate_tok_s"
+    ],
+    "alternatives": [
+      "sm80.host-bound"
+    ],
+    "citation": "engine host/device wait split"
+  }
+]

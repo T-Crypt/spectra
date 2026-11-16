@@ -54,6 +54,42 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("path", help="Path to a stored run JSON file.")
     rep.add_argument("--profile", default=None)
     rep.add_argument("--rules", default=None)
+
+    cmp_p = subs.add_parser("compare", help="Compare two stored runs.")
+    cmp_p.add_argument("run_a", help="Path to first run JSON.")
+    cmp_p.add_argument("run_b", help="Path to second run JSON.")
+    cmp_p.add_argument("--profile", default=None)
+
+    runs_p = subs.add_parser("runs", help="List stored runs.")
+    runs_p.add_argument("--root", default="runs")
+
+    findings_p = subs.add_parser("findings", help="List or query stored findings.")
+    findings_p.add_argument("--root", default="findings")
+    findings_p.add_argument("--arch", default=None)
+    findings_p.add_argument("--engine", default=None)
+    findings_p.add_argument("--workload-class", default=None)
+    findings_p.add_argument("--variable", default=None)
+    findings_p.add_argument("--direction", default=None)
+    findings_p.add_argument("--verdict", default=None)
+
+    exp = subs.add_parser("experiment", help="Plan or evaluate an experiment.")
+    exp_sub = exp.add_subparsers(dest="experiment_command")
+    plan_p = exp_sub.add_parser("plan", help="Plan an experiment from a baseline run.")
+    plan_p.add_argument("--baseline", required=True)
+    plan_p.add_argument("--hypothesis", required=True)
+    plan_p.add_argument("--variable", required=True)
+    plan_p.add_argument("--treatment", required=True)
+    plan_p.add_argument("--out", default="experiments")
+    plan_p.add_argument("--threshold", type=float, default=0.05)
+    eval_p = exp_sub.add_parser("evaluate", help="Evaluate baseline vs treatment into a finding.")
+    eval_p.add_argument("--baseline", required=True)
+    eval_p.add_argument("--treatment", required=True)
+    eval_p.add_argument("--experiment", required=True)
+    eval_p.add_argument("--out", default="findings")
+    eval_p.add_argument("--experiments-root", default="experiments")
+    show_p = exp_sub.add_parser("show", help="Show an experiment runbook.")
+    show_p.add_argument("id")
+    show_p.add_argument("--root", default="experiments")
     return parser
 
 
@@ -121,5 +157,159 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(rendered, end="")
         return 0
-    parser.error(f"unknown command: {args.command}")
-    return 2
+    if args.command == "compare":
+        from .fingerprint import compare_runs
+        from .reference import default_profile_path, load_profile
+        from .store import load_run
+
+        try:
+            run_a = load_run(args.run_a)
+            run_b = load_run(args.run_b)
+            profile = load_profile(args.profile or default_profile_path())
+            result = compare_runs(run_a, run_b, profile)
+        except (ValueError, OSError, RuntimeError) as exc:
+            print(f"compare: {exc}", file=sys.stderr)
+            return 2
+        import json
+        print(json.dumps({
+            "verdict": result.verdict.value,
+            "reason": result.reason,
+            "differences": result.differences,
+            "config_diff": result.config_diff,
+            "metric_deltas": result.metric_deltas,
+        }, indent=2))
+        return 0
+    if args.command == "runs":
+        from .store import list_runs
+
+        try:
+            for path in list_runs(args.root):
+                print(path)
+        except (ValueError, OSError, RuntimeError) as exc:
+            print(f"runs: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "findings":
+        from .store import query_findings
+
+        try:
+            findings = query_findings(
+                args.root,
+                arch=args.arch,
+                engine_id=args.engine,
+                workload_class=args.workload_class,
+                variable=args.variable,
+                direction=args.direction,
+                verdict=args.verdict,
+            )
+        except (ValueError, OSError, RuntimeError) as exc:
+            print(f"findings: {exc}", file=sys.stderr)
+            return 2
+        import json
+        for finding in findings:
+            print(json.dumps({
+                "id": finding.id,
+                "verdict": finding.verdict.value,
+                "hypothesis_id": finding.hypothesis_id,
+                "experiment_id": finding.experiment_id,
+                "delta": finding.delta,
+                "variable": finding.variable,
+                "direction": finding.direction,
+            }))
+        return 0
+    if args.command == "experiment":
+        from .experiment import (
+            approve,
+            evaluate_experiment,
+            plan_experiment,
+            render_runbook,
+        )
+        from .reference import default_profile_path, load_profile
+        from .store import (
+            load_experiment,
+            load_run,
+            save_experiment,
+            save_finding,
+        )
+
+        sub = getattr(args, "experiment_command", None)
+        if sub == "plan":
+            try:
+                baseline = load_run(args.baseline)
+                exp = plan_experiment(
+                    args.hypothesis,
+                    baseline,
+                    args.variable,
+                    _coerce(args.treatment),
+                    experiment_id=None,
+                )
+                exp.success_criteria["threshold"] = args.threshold
+                path = save_experiment(exp, args.out)
+            except (ValueError, OSError, RuntimeError) as exc:
+                print(f"experiment: {exc}", file=sys.stderr)
+                return 2
+            print(path)
+            print(render_runbook(exp))
+            return 0
+        if sub == "evaluate":
+            try:
+                baseline = load_run(args.baseline)
+                treatment = load_run(args.treatment)
+                experiment = load_experiment(
+                    _find_experiment(args.experiments_root, args.experiment))
+                profile = load_profile(default_profile_path())
+                finding = evaluate_experiment(experiment, baseline, treatment, profile)
+                finish = experiment
+                from .model import ExperimentStatus
+                finish.status = ExperimentStatus.DONE
+                finish.treatment_run_id = treatment.id
+                save_experiment(finish, args.experiments_root)
+                path = save_finding(finding, args.out)
+            except (ValueError, OSError, RuntimeError) as exc:
+                print(f"experiment: {exc}", file=sys.stderr)
+                return 2
+            print(path)
+            return 0
+        if sub == "show":
+            try:
+                experiment = load_experiment(
+                    _find_experiment(args.root, args.id))
+            except (ValueError, OSError, RuntimeError) as exc:
+                print(f"experiment: {exc}", file=sys.stderr)
+                return 2
+            print(render_runbook(experiment))
+            return 0
+        parser.error("experiment requires a subcommand")
+        return 2
+    return 0
+
+
+def _coerce(value: str):
+    """Coerce a CLI string into int/float/bool/str for experiment values."""
+    low = value.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+
+
+def _find_experiment(root: str, experiment_id: str) -> str:
+    from pathlib import Path
+
+    name = experiment_id
+    if name.endswith(".experiment"):
+        name = name[: -len(".experiment")]
+    candidate = Path(root) / f"{name}.experiment.json"
+    if candidate.is_file():
+        return str(candidate)
+    # Fall back to a direct path.
+    if Path(experiment_id).is_file():
+        return experiment_id
+    # Maybe the caller passed the full file name.
+    if Path(root, experiment_id).is_file():
+        return str(Path(root, experiment_id))
+    raise FileNotFoundError(f"experiment {experiment_id!r} not found under {root}")

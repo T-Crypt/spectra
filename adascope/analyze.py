@@ -59,6 +59,7 @@ EVIDENCE_FACTS = {
     "spec_tokens_per_forward": "",
     "spec_acceptance_ratio": "",
     "temp_c": "C",
+    "host_exposed_ratio": "",
 }
 THROTTLE_FALLBACKS = (
     "throttle.sw_power_cap",
@@ -212,6 +213,13 @@ def facts_from_run(run: Run, profile: dict) -> dict:
     process_counts = series.get("gpu_process_count", [])
     co_tenant = bool(process_counts) and max(v for _, v in process_counts) >= 2
 
+    host_series = _steady(series.get("host_exposed_seconds_total", []))
+    decode_series = _steady(series.get("request_decode_seconds", []))
+    host_delta = _delta(host_series) if host_series else None
+    decode_delta = _delta(decode_series) if decode_series else None
+    host_ratio = (host_delta / decode_delta) if (host_delta is not None and decode_delta and decode_delta > 0) else 0.0
+    host_available = bool(host_delta is not None and decode_delta and decode_delta > 0)
+
     facts: dict = {
         "power_ratio": power_ratio,
         "temp_c": temp_c,
@@ -227,6 +235,8 @@ def facts_from_run(run: Run, profile: dict) -> dict:
         "spec_method": spec_method,
         "spec_acceptance_ratio": acceptance,
         "co_tenant": co_tenant,
+        "host_exposed_ratio": host_ratio,
+        "host_exposed_available": host_available,
         "steady_window": _span(power),
     }
     for key, points in series.items():
@@ -285,6 +295,16 @@ def observations_from_run(run: Run) -> list[Observation]:
         out.append(Observation(run.id, "gpu_process_count", max(v for _, v in counts), "count",
                                _span(counts), "against 1, the engine alone",
                                "max over the window", ["gpu_process_count"]))
+    host = _steady(series.get("host_exposed_seconds_total", []))
+    decode = _steady(series.get("request_decode_seconds", []))
+    if host and decode:
+        hd = _delta(host)
+        dd = _delta(decode)
+        if hd is not None and dd and dd > 0:
+            out.append(Observation(run.id, "host_exposed_ratio", hd / dd, "ratio",
+                                   _span(host), "against 0.3, the host-bound threshold",
+                                   "host exposed seconds / decode seconds",
+                                   ["host_exposed_seconds_total"]))
     return out
 
 

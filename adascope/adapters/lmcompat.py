@@ -63,6 +63,8 @@ class JsonlRequest(NamedTuple):
     drafted_tokens: int | None
     accepted_tokens: int | None
     draft_window: int | None
+    host_exposed_seconds: float | None = None
+    device_wait_seconds: float | None = None
     timestamp_unix_ms: int | None = None
     server_instance_id: str | None = None
 
@@ -108,6 +110,15 @@ def _number(value: Any) -> float | None:
     return float(value)
 
 
+def _host_exposed_total(engine_timing: Any) -> Any:
+    if not isinstance(engine_timing, dict):
+        return None
+    value = engine_timing.get("host_exposed_seconds")
+    if isinstance(value, dict):
+        return value.get("total")
+    return value
+
+
 def _int_or_none(value: Any) -> int | None:
     number = _number(value)
     return int(number) if number is not None else None
@@ -141,6 +152,11 @@ def _request_from_record(record: dict[str, Any]) -> JsonlRequest | None:
         drafted_tokens=_int_or_none(speculative.get("drafted_tokens")),
         accepted_tokens=_int_or_none(speculative.get("accepted_tokens")),
         draft_window=_int_or_none(speculative.get("draft_window")),
+        host_exposed_seconds=_number(
+            _host_exposed_total(record.get("engine_timing"))),
+        device_wait_seconds=_number(
+            (record.get("engine_timing") or {}).get("device_wait_exposed_seconds")
+            if isinstance(record.get("engine_timing"), dict) else None),
         timestamp_unix_ms=_int_or_none(record.get("timestamp_unix_ms")),
         server_instance_id=record.get("server_instance_id")
         if isinstance(record.get("server_instance_id"), str)

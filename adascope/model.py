@@ -28,6 +28,26 @@ class Direction(str, Enum):
     MINIMIZE = "minimize"
 
 
+class ExperimentStatus(str, Enum):
+    PLANNED = "planned"
+    APPROVED = "approved"
+    RUNNING = "running"
+    DONE = "done"
+    ABORTED = "aborted"
+
+
+class FindingVerdict(str, Enum):
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    INCONCLUSIVE = "inconclusive"
+
+
+class ComparisonVerdict(str, Enum):
+    COMPARABLE = "comparable"
+    COMPARABLE_WITH_NORMALIZATION = "comparable_with_normalization"
+    NOT_COMPARABLE = "not_comparable"
+
+
 @dataclass
 class HardwareProfile:
     name: str
@@ -123,6 +143,69 @@ class Hypothesis:
     rules: list[str] = field(default_factory=list)
     alternatives: list["Hypothesis"] = field(default_factory=list)
     confidence: Quality = Quality.HYPOTHESIS
+
+
+@dataclass
+class Experiment:
+    id: str
+    hypothesis_id: str
+    baseline_run_id: str
+    variable: str
+    baseline_value: Any = None
+    treatment_value: Any = None
+    success_criteria: dict = field(default_factory=dict)
+    rollback: dict = field(default_factory=dict)
+    status: ExperimentStatus = ExperimentStatus.PLANNED
+    treatment_run_id: str | None = None
+    notes: str = ""
+
+
+@dataclass
+class Finding:
+    id: str
+    hypothesis_id: str
+    experiment_id: str | None = None
+    verdict: FindingVerdict = FindingVerdict.INCONCLUSIVE
+    delta: dict = field(default_factory=dict)
+    notes: str = ""
+    artifacts: list[str] = field(default_factory=list)
+    arch: str | None = None
+    engine_id: str | None = None
+    workload_class: str | None = None
+    variable: str | None = None
+    direction: str | None = None
+
+
+@dataclass
+class Fingerprint:
+    run_id: str
+    arch: str
+    engine_id: str
+    engine_version: str | None = None
+    model_id: str | None = None
+    artifact_bytes: int | None = None
+    artifact_sha256: str | None = None
+    objective: dict = field(default_factory=dict)
+    config: dict = field(default_factory=dict)
+    hardware_name: str | None = None
+    driver_version: str | None = None
+    cuda_driver_version: str | None = None
+    contention: bool = False
+    sources: list[str] = field(default_factory=list)
+    metrics: list[str] = field(default_factory=list)
+    sampling: dict = field(default_factory=dict)
+    created_at: str | None = None
+
+
+@dataclass
+class Comparison:
+    run_a_id: str
+    run_b_id: str
+    verdict: ComparisonVerdict = ComparisonVerdict.NOT_COMPARABLE
+    reason: str = ""
+    differences: list[dict] = field(default_factory=list)
+    config_diff: list[dict] = field(default_factory=list)
+    metric_deltas: dict = field(default_factory=dict)
 
 
 def _enum_value(v: Any) -> Any:

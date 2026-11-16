@@ -100,21 +100,28 @@ def _request_series(summary, start_ms: int, end_ms: int) -> list[Series]:
     tokens: list[tuple[float, float]] = []
     seconds: list[tuple[float, float]] = []
     rounds: list[tuple[float, float]] = []
+    host_exposed: list[tuple[float, float]] = []
+    device_wait: list[tuple[float, float]] = []
     total_tokens = 0
     total_seconds = 0.0
     total_rounds = 0
+    total_host = 0.0
+    total_device = 0.0
     for request in kept:
-        # The first token of a request comes from the prefill pass, which is
-        # the engine's own convention for a decode rate. See the engine's
-        # request_log and operational log.
         total_tokens += max(0, request.completion_tokens - 1)
         total_seconds += request.decode_seconds
         total_rounds += request.rounds or 0
+        if request.host_exposed_seconds is not None:
+            total_host += request.host_exposed_seconds
+        if request.device_wait_seconds is not None:
+            total_device += request.device_wait_seconds
         offset = (request.timestamp_unix_ms - start_ms) / 1000.0
         tokens.append((offset, float(total_tokens)))
         seconds.append((offset, float(total_seconds)))
         rounds.append((offset, float(total_rounds)))
-    return [
+        host_exposed.append((offset, float(total_host)))
+        device_wait.append((offset, float(total_device)))
+    out = [
         Series(metric="request_decode_tokens", unit="count", source=JSONL_SOURCE,
                quality=Quality.MEASURED, samples=tokens),
         Series(metric="request_decode_seconds", unit="s", source=JSONL_SOURCE,
@@ -122,6 +129,15 @@ def _request_series(summary, start_ms: int, end_ms: int) -> list[Series]:
         Series(metric="request_decode_rounds", unit="count", source=JSONL_SOURCE,
                quality=Quality.MEASURED, samples=rounds),
     ]
+    if any(v for _, v in host_exposed):
+        out.append(Series(metric="host_exposed_seconds_total", unit="s",
+                          source=JSONL_SOURCE, quality=Quality.MEASURED,
+                          samples=host_exposed))
+    if any(v for _, v in device_wait):
+        out.append(Series(metric="device_wait_seconds_total", unit="s",
+                          source=JSONL_SOURCE, quality=Quality.MEASURED,
+                          samples=device_wait))
+    return out
 
 
 def observe(
