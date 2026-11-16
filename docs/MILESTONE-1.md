@@ -4,7 +4,7 @@ Goal, a walking skeleton that observes a live engine, stores a raw run, and rege
 
 This plan turns the milestone described in `docs/DESIGN.md` into an ordered set of commits. Each commit ends in a state that runs and is checked. Each commit is a future PR.
 
-C1-C12 are implemented and green. `python -m unittest discover -s tests` reports 74 tests OK: the package scaffold, the domain types in `adascope/model.py`, the append-only run store in `adascope/store.py`, both adapters, `observe`, the reference model, the rule engine, analysis, the report, and the acceptance and eval tests.
+C1-C12 are implemented and green. `python -m unittest discover -s tests` reports 78 tests OK: the package scaffold, the domain types in `adascope/model.py`, the append-only run store in `adascope/store.py`, both adapters, `observe`, the reference model, the rule engine, analysis, the report, and the acceptance and eval tests.
 
 ## Definition of done
 
@@ -132,7 +132,7 @@ Verify. `python -m unittest discover -s tests` runs the scaffold smoke test and 
 
 Files. `adascope/model.py`, `tests/test_model.py`.
 
-Interface. `@dataclass` types above. `to_dict(obj)` and `from_dict(cls, d)` for every type, plus `Run.to_json()` and `Run.from_json(text)`. Enums serialize by name. Tuples serialize as two-element lists.
+Interface. `@dataclass` types above. `to_dict(obj)` and `from_dict(cls, d)` for every type, plus `run_to_json(run)` and `run_from_json(text)`. Enums serialize by value. Tuples serialize as two-element lists.
 
 Test. Build one fully populated `Run` with literal field values, serialize, deserialize, assert the result equals the original. Assert a Series sample tuple survives as a tuple. This is behavior, not implementation.
 
@@ -170,11 +170,11 @@ Files. `adascope/cli.py` extended, `adascope/observe.py`, `tests/test_cli_observ
 
 Interface. `spectra observe --target HOST:PORT --duration 30 --hz 2 --artifact PATH --config FILE --metrics-jsonl PATH --out runs/`. Parse and validate the target at the boundary. Loop for `duration`, sample NVML at `hz`, poll `/metrics` at `hz`, accumulate two `Series` (hardware, engine) plus per-request series from JSONL when present. Build the `Run` and `save_run`.
 
-Verify. `python -m spectra observe --target 127.0.0.1:5804 --duration 30 --hz 2 --artifact /home/tcrypt/ninfer-4090/models/qwen3_8_27b.ninfer --out runs/smoke.json`, then load the file and assert the sample count is at least `duration * hz` minus a tolerance and both series are non-empty.
+Verify. `python -m adascope observe --target 127.0.0.1:5804 --duration 30 --hz 2 --artifact /home/tcrypt/ninfer-4090/models/qwen3_8_27b.ninfer --out runs/smoke.json`, then load the file and assert the sample count is at least `duration * hz` minus a tolerance and both series are non-empty.
 
 ### C7 `feat(reference): add memory-bound dense decode model`
 
-Files. `adascope/reference.py`, `profiles/sm89.json`, `tests/test_reference.py`, `tests/test_reference_sm89.py`.
+Files. `adascope/reference.py`, `profiles/sm89.json`, `tests/test_reference.py`.
 
 Interface. `dense_decode_reference(artifact_bytes, kv_bytes_per_token, context_tokens, bandwidth_gbps, spec_tokens_per_forward) -> ReferenceModel`. Pure.
 
@@ -203,11 +203,11 @@ sm89.power-cap-limit
   applies_when: all(power_ratio >= 0.95, objective_ratio < 0.90)
   claim_kind: bounded_by
   claim: limited by the power cap
-  confidence: measured when throttle.power_cap is true, else supported
+  confidence: measured when throttle.sw_power_cap is true, else derived
   citation: NVML throttle reason bits; Ada boost behavior
 
 sm89.thermal-throttle
-  applies_when: all(temp_c >= 83, throttle.thermal is true)
+  applies_when: all(temp_c >= 83, throttle.sw_thermal_slowdown is true)
   claim_kind: bounded_by
   claim: limited by temperature
   confidence: measured
@@ -221,7 +221,7 @@ sm89.decode-near-bandwidth-roof
   citation: 1008 GB/s documented memory bandwidth
 ```
 
-`facts` is a flat dict produced in C9, for example `power_ratio`, `objective_ratio`, `temp_c`, `throttle.power_cap`, `throttle.thermal`. Keeping facts flat and rules as data means a new architecture is a new JSON file.
+`facts` is a flat dict produced in C9, for example `power_ratio`, `objective_ratio`, `temp_c`, `throttle.sw_power_cap`, `throttle.sw_thermal_slowdown`. Keeping facts flat and rules as data means a new architecture is a new JSON file.
 
 Test. Feed synthetic fact dicts and assert the exact set of fired rule ids. One case per rule firing, one case firing none, one case where two rules tie.
 

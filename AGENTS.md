@@ -19,8 +19,8 @@ adascope/
   engine.py         # pure: observations -> ranked hypotheses
   report.py         # pure: run -> text
   analyze.py        # derive observations, rank hypotheses
-profiles/
-  sm89.json         # architecture profile data
+  profiles/
+    sm89.json       # architecture profile data
 runs/               # local, gitignored
 tests/
 

@@ -212,7 +212,7 @@ Two consequences of the frozen shapes:
 | Missing | Content needed | Blocks |
 | --- | --- | --- |
 | `profiles/sm89.json` | The AdaScope file's keys, read for this design: `arch` `sm_89`, `mem_bandwidth_spec_gbps` 1008, `sm_count` 128, `l2_bytes` 75497472, `pcie_link_gen` 4, `pcie_link_width` 16, `clock_sm_max_mhz` 3135, `clock_mem_max_mhz` 10501, `throttle_semantics`, `citations` | A3, every ceiling |
-| `adascope/rules/sm89.json` | The three rules: `sm89.power-cap-limit` (`power_ratio >= 0.95` and `objective_ratio < 0.9`), `sm89.thermal-throttle` (`temp_c >= 83` and `throttle.sw_thermal_slowdown`), `sm89.decode-near-bandwidth-roof` (`objective_ratio >= 0.9`) | A4, A5 |
+| `adascope/rules/sm89.json` | The three rules: `sm89.power-cap-limit` (`power_ratio >= 0.95` and `objective_ratio < 0.9`), `sm89.thermal-throttle` (`temp_c >= 83` and `throttle.sw_thermal_slowdown`), `sm89.decode-near-bandwidth-roof` (`0.9 <= objective_ratio <= 1.0`) | A4, A5 |
 | `adascope/adapters/nvml.py` | ctypes binding, nine named throttle bits, `discover()` and `sample()` | E1, E2 telemetry |
 | `adascope/adapters/lmcompat.py` | Prometheus parsing, `/v1/models`, JSONL reader | E1, E2 counters, A2 |
 | `adascope/observe.py` | Sampling loop, `parse_target`, `save_run` | E1, E2 |
