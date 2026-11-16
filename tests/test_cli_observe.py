@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from adascope.cli import main
+from adascope.cli import build_parser, main
 from adascope.observe import parse_target
 from adascope.store import load_run
 from tests.fixtures import machine
@@ -37,6 +37,16 @@ class ObserveBoundaryTest(unittest.TestCase):
             with self.assertRaises(SystemExit) as caught:
                 main(["frobnicate"])
         self.assertNotEqual(caught.exception.code, 0)
+
+    def test_unknown_engine_is_rejected_before_any_io(self):
+        rc = main(["observe", "--target", "127.0.0.1:5804", "--engine", "bogus"])
+        self.assertEqual(rc, 2)
+
+    def test_valid_engine_flags_are_accepted_by_the_parser(self):
+        for engine in ("auto", "ninfer", "llamacpp", "vllm"):
+            args = build_parser().parse_args(["observe", "--target", "127.0.0.1:5804",
+                                              "--engine", engine])
+            self.assertEqual(args.engine, engine)
 
 
 @unittest.skipUnless(gpu_available(), NO_GPU_REASON)

@@ -42,6 +42,16 @@ class AnalyzeTest(unittest.TestCase):
         ranked = hypotheses_from_run(run, profile(), rules())
         self.assertEqual([h.rules[0] for h in ranked], [])
 
+    def test_rounds_counter_wins_over_the_subtraction(self):
+        # llama.cpp publishes spec_decode_num_drafts_total, stored as
+        # draft_rounds_total. The factor must read committed/rounds, and the
+        # fixture carries no accepted counter, so the subtraction path cannot
+        # stand in if the code takes it.
+        facts = facts_from_run(fixtures.rounds_counter_run(), profile())
+        self.assertAlmostEqual(facts["spec_tokens_per_forward"], 120.0 / 32.0, places=6)
+        self.assertEqual(facts["spec_method"],
+                         "committed/draft_rounds_total: tokens per decode forward pass")
+
     def test_inconsistent_run_is_flagged(self):
         # A9: a run whose own counters exceed the ceiling it derived.
         facts = facts_from_run(fixtures.inconsistent_run(), profile())

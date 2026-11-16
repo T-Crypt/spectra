@@ -5,7 +5,6 @@ from adascope.adapters.lmcompat import (
     LmCompat,
     parse_jsonl_lines,
     parse_metrics_text,
-    strip_known_prefix,
 )
 from tests.fixtures import machine
 from tests.support import engine_available, engine_down_reason
@@ -43,12 +42,6 @@ class PrometheusParserTest(unittest.TestCase):
         self.assertEqual(parsed["ninfer:draft_accepted_tokens_total"], 43693)
         self.assertNotIn("tokens_predicted_total", parsed)
         self.assertNotIn("draft_accepted_tokens_total", parsed)
-
-    def test_strip_known_prefix(self):
-        self.assertEqual(strip_known_prefix("llamacpp:tokens_predicted_total"), "tokens_predicted_total")
-        self.assertEqual(strip_known_prefix("ninfer:draft_tokens_total"), "draft_tokens_total")
-        self.assertEqual(strip_known_prefix("power_draw_w"), "power_draw_w")
-
 
 class JsonlReaderTest(unittest.TestCase):
     def test_v20_records_are_read_and_junk_is_ignored(self):

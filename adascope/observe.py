@@ -16,7 +16,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .adapters.lmcompat import LmCompat, parse_jsonl, strip_known_prefix
+from .adapters.engines import ENGINE_IDS, canonical_name, detect_engine
+from .adapters.lmcompat import LmCompat, parse_jsonl
 from .adapters.nvml import Nvml
 from .model import Quality, Run, Series
 from .store import save_run
@@ -130,12 +131,16 @@ def observe(
     jsonl_path: str | None = None,
     out: str | Path = "runs",
     config_file: str | None = None,
+    engine: str = "auto",
 ) -> Path:
     """Sample NVML and the engine for duration_s and store one Run."""
     host, port = parse_target(target)
     sampling = parse_sampling(duration_s, hz)
     interval = sampling["interval_ms"] / 1000.0
     duration_s = sampling["duration_s"]
+
+    if engine != "auto" and engine not in ENGINE_IDS:
+        raise ValueError(f"unknown engine {engine!r}; expected auto or one of {', '.join(ENGINE_IDS)}")
 
     merged_config: dict = dict(config or {})
     if config_file:
@@ -151,7 +156,19 @@ def observe(
         model_id = str(models[0].get("id", "unknown")) if models else "unknown"
     except Exception:
         model_id = "unknown"
-    workload = client.workload(model_id, merged_config, artifact_path, jsonl_path)
+    if engine == "auto":
+        # One fetch decides the name table. A dead /metrics leaves the
+        # detection at its default and the loop keeps trying, so an engine
+        # that answers late still gets observed.
+        try:
+            probe = set(client.metrics())
+        except Exception:
+            probe = set()
+        engine_id, _basis = detect_engine(probe)
+    else:
+        engine_id = engine
+    workload = client.workload(model_id, merged_config, artifact_path, jsonl_path,
+                               engine_id=engine_id)
 
     count = max(1, round(duration_s * hz))
     hw_accum: dict[str, list[tuple[float, float]]] = {}
@@ -186,7 +203,7 @@ def observe(
         except Exception:
             metrics = {}
         for key, value in metrics.items():
-            eng_accum.setdefault(strip_known_prefix(key), []).append((elapsed, float(value)))
+            eng_accum.setdefault(canonical_name(engine_id, key), []).append((elapsed, float(value)))
         wait = interval - (time.monotonic() - tick_start)
         if wait > 0 and i < count - 1:
             time.sleep(wait)

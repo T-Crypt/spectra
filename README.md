@@ -63,7 +63,7 @@ python -m unittest discover -s tests
 
 ## Scope
 
-Initial target: NVIDIA Ada Lovelace (sm_89), local LLM inference. Adapters and rule boundaries keep other architectures and engines addable without core changes. Phase 1 uses the standard library only.
+Initial target: NVIDIA Ada Lovelace (sm_89), local LLM inference. Engine name tables cover ninfer, llama.cpp and vLLM; `--engine` forces one, and auto-detection reads a single `/metrics` fetch. Adapters and rule boundaries keep other architectures and engines addable without core changes. Phase 1 uses the standard library only.
 
 ## Status
 

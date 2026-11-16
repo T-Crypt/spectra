@@ -12,6 +12,8 @@ import sys
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .adapters.engines import ENGINE_IDS
+
     parser = argparse.ArgumentParser(
         prog="spectra",
         description="Architecture-aware GPU performance diagnosis.",
@@ -26,6 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     obs.add_argument("--config", default=None, help="JSON file holding launch config.")
     obs.add_argument("--metrics-jsonl", default=None)
     obs.add_argument("--out", default="runs")
+    obs.add_argument("--engine", default="auto",
+                     help="Engine name table: auto (detected from /metrics) or one of "
+                          + ", ".join(ENGINE_IDS))
 
     rep = subs.add_parser("report", help="Render a stored Run as text.")
     rep.add_argument("path", help="Path to a stored run JSON file.")
@@ -53,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
                 config_file=args.config,
                 jsonl_path=args.metrics_jsonl,
                 out=args.out,
+                engine=args.engine,
             )
         except (ValueError, OSError, RuntimeError) as exc:
             print(f"observe: {exc}", file=sys.stderr)

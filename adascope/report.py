@@ -114,7 +114,7 @@ def render(run: Run, profile: dict, rules: list[dict]) -> str:
     lines = [
         f"Run:         {run.id}  ({run.started_at} -> {run.ended_at})  (measured)",
         f"Workload:    {_objective(run)}  (measured)",
-        f"Engine:      {wl.adapter_id} model {wl.model_id or 'unknown'}  (measured)",
+        f"Engine:      {wl.engine_id} via {wl.adapter_id} model {wl.model_id or 'unknown'}  (measured)",
         f"GPU:         {hw.name} ({hw.arch}, cc {hw.compute_capability}) "
         f"driver {hw.driver_version} CUDA {hw.cuda_driver_version}  (measured)",
         f"Tier:        {', '.join(run.sources) if run.sources else 'unknown'}  (measured)",

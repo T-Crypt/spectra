@@ -19,8 +19,6 @@ from typing import Any, Iterable, NamedTuple
 
 from ..model import Workload
 
-KNOWN_PREFIXES = ("llamacpp:", "ninfer:")
-
 SUPPORTED_SCHEMA_VERSIONS = (20, 21)
 
 
@@ -29,8 +27,8 @@ def parse_metrics_text(body: str) -> dict[str, float]:
 
     Keys keep their full names, for example ``llamacpp:tokens_predicted_total``.
     No stripped alias is added: two keys for one number invites a caller to sum
-    both. Use :func:`strip_known_prefix` when a bare series name is wanted.
-    A repeated name keeps its last value.
+    both. Use ``adascope.adapters.engines.canonical_name`` when a stored series
+    name is wanted. A repeated name keeps its last value.
     """
     out: dict[str, float] = {}
     for line in body.splitlines():
@@ -49,14 +47,6 @@ def parse_metrics_text(body: str) -> dict[str, float]:
             continue
         out[name] = number
     return out
-
-
-def strip_known_prefix(name: str) -> str:
-    """Remove exactly one of the engine's metric name prefixes."""
-    for prefix in KNOWN_PREFIXES:
-        if name.startswith(prefix):
-            return name[len(prefix):]
-    return name
 
 
 class JsonlRequest(NamedTuple):
@@ -239,6 +229,7 @@ class LmCompat:
         config: dict[str, Any] | None = None,
         artifact_path: str = "",
         jsonl_path: str | None = None,
+        engine_id: str = "ninfer",
     ) -> Workload:
         """Build the workload for one observed session.
 
@@ -259,7 +250,7 @@ class LmCompat:
 
         return Workload(
             adapter_id="lmcompat",
-            engine_id="ninfer",
+            engine_id=engine_id,
             engine_version=None,
             model_id=model_id,
             artifact_path=artifact_path,

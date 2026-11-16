@@ -221,6 +221,26 @@ def roof_run() -> Run:
     )
 
 
+def rounds_counter_run() -> Run:
+    """llama.cpp-style counters: a rounds counter is present, so the factor
+    must come from committed/rounds, not from the committed - accepted
+    subtraction. 120 committed tokens over 32 rounds is 3.75 tokens per
+    forward pass; no accepted counter is carried, so the subtraction path
+    cannot stand in if the code takes it."""
+    committed, rounds = 120.0, 32.0
+    span = 2.0
+    return _run(
+        "fixture-rounds",
+        [
+            _flat("power_draw_w", 300.0, "W", "nvml", count=10, span_s=span),
+            _counter("tokens_predicted_total", committed, "count", "llamacpp", span_s=span),
+            _counter("tokens_predicted_seconds_total", 1.0, "s", "llamacpp", span_s=span),
+            _counter("draft_rounds_total", rounds, "count", "llamacpp", span_s=span),
+        ],
+        ["nvml", "llamacpp"],
+    )
+
+
 def one_sample_run() -> Run:
     """Counter series with a single sample each: no delta, so no rate.
 

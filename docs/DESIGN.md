@@ -252,7 +252,9 @@ nsys(Adapter) / ncu(Adapter)
   Phase 3+, optional, import only
 ```
 
-`nimfer` is an instance of `lmcompat`, not a special case in the core.
+`ninfer` is an instance of `lmcompat`, not a special case in the core.
+
+Engine name table. The analyser reads a fixed set of canonical series names (`tokens_predicted_total`, `tokens_predicted_seconds_total`, `draft_tokens_total`, `draft_accepted_tokens_total`, `draft_rounds_total`). Each engine writes its own names, and the table in `adascope/adapters/engines.py` maps a given engine's native names onto the canonical ones. A name the table does not know passes through unchanged, prefix stripped, so a run records what the engine emitted. `observe` detects the engine from one `/metrics` fetch (the `vllm:` prefix, the `n_decode_total` counter, or a bare `draft_tokens_total` counter) and takes `--engine` to force a table. An engine outside the table degrades honestly: vLLM publishes `generation_tokens_total` but no decode-seconds counter, so a vLLM run takes its decode rate from the wall-window fallback in the analyser, and with no draft counters the speculative factor stays at the no-speculation default.
 
 ## Milestone 1. The walking skeleton
 
