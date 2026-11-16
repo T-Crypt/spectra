@@ -51,7 +51,7 @@ class NvmlTest(unittest.TestCase):
         self.assertIn("4090", hw.name)
         vram_mib = nvidia_smi("memory.total")
         self.assertAlmostEqual(hw.vram_total_bytes, vram_mib * 1024 * 1024, delta=0.01 * vram_mib * 1024 * 1024)
-        self.assertEqual(hw.clock_sm_max_mhz, 3135)
+        self.assertEqual(hw.clock_sm_max_mhz, nvidia_smi("clocks.max.sm"))
         self.assertEqual(hw.arch, "sm_89")
         self.assertEqual(hw.compute_capability, "8.9")
 
@@ -87,6 +87,9 @@ class NvmlTest(unittest.TestCase):
             capture_output=True, text=True, check=True,
         ).stdout.split()
         self.assertEqual({str(p["pid"]) for p in procs}, set(smi_pids))
+        # The enumerator and the CLI must name the same processes, and the
+        # run must say which one produced the list.
+        self.assertIn(Nvml.processes_method(), ("nvml", "nvidia-smi"))
 
 
 if __name__ == "__main__":

@@ -340,6 +340,7 @@ def contended_run() -> Run:
             {"pid": 44201, "used_gpu_memory_bytes": 18912 * 1024 ** 2,
              "process_name": ""},
         ],
+        "gpu_processes_method": "nvml",
     }
     return run
 

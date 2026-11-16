@@ -254,7 +254,12 @@ the engine does not already publish. What it can add is memory, comparability an
 > `observe` enumerates the card's compute processes every tick (`Nvml.processes()`),
 > stores a first-tick snapshot in `Run.environment`, and the report prints the list.
 > A second process on the card fires the `sm89.gpu-co-tenant` rule at measured
-> confidence. What was not implemented: the comparability rows, which stay open.
+> confidence. One correction to this section's finding: the NVML process
+> enumerator needs root on this driver (NVML error 7), unlike the sample
+> calls; the unprivileged path falls back to the same table from
+> `nvidia-smi`, and the run records which enumerator produced the list
+> (`gpu_processes_method`). What was not implemented: the comparability
+> rows, which stay open.
 
 ## 8. Candidate differentiators
 

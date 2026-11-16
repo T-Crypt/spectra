@@ -230,8 +230,11 @@ def observe(
             hw_accum.setdefault("gpu_process_memory_bytes", []).append(
                 (elapsed, float(sum(p["used_gpu_memory_bytes"] for p in procs))))
             if env_snapshot is None:
-                env_snapshot = {"gpu_processes": sorted(
-                    procs, key=lambda p: -p["used_gpu_memory_bytes"])}
+                env_snapshot = {
+                    "gpu_processes": sorted(
+                        procs, key=lambda p: -p["used_gpu_memory_bytes"]),
+                    "gpu_processes_method": Nvml.processes_method(),
+                }
         for key, value in sample.items():
             if isinstance(value, bool):
                 point = (elapsed, 1.0 if value else 0.0)

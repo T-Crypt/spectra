@@ -103,10 +103,12 @@ def _gpu_processes_lines(run: Run) -> list[str]:
     first tick, in order of its memory. It does not say which one is the
     engine; that split is the operator's to make from the names and sizes.
     """
-    procs = run.environment.get("gpu_processes") if isinstance(run.environment, dict) else None
+    env = run.environment if isinstance(run.environment, dict) else {}
+    procs = env.get("gpu_processes")
     if not procs:
         return ["GPU processes:  unavailable - not recorded in this run  (unavailable)"]
-    out = [f"GPU processes:  {len(procs)}  (measured)"]
+    method = env.get("gpu_processes_method") or "unknown"
+    out = [f"GPU processes:  {len(procs)}  (via {method})  (measured)"]
     for proc in procs:
         mib = proc.get("used_gpu_memory_bytes", 0) / 1048576
         name = proc.get("process_name") or ""

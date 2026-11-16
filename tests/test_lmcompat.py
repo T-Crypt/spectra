@@ -131,10 +131,13 @@ class LmCompatLiveTest(unittest.TestCase):
             first["llamacpp:tokens_predicted_seconds_total"],
         )
 
-    def test_models_lists_ninfer_model(self):
+    def test_models_lists_a_model(self):
+        # Which model the engine slot holds changes with llama-swap; the
+        # contract under test is that /v1/models answers with at least one
+        # non-empty id, not a particular model.
         client = LmCompat(HOST, PORT)
         ids = [str(m.get("id", "")) for m in client.models()]
-        self.assertTrue(any("NInfer" in mid for mid in ids), ids)
+        self.assertTrue(any(mid for mid in ids), ids)
 
 
 if __name__ == "__main__":
