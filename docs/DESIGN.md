@@ -125,6 +125,9 @@ Run
   sources: [adapter_id]
   artifacts: [jsonl_path, log_path, ppm_or_other]
   series: [Series]
+  environment: {gpu_processes: [{pid, used_gpu_memory_bytes, process_name}]}
+              # first-tick snapshot of the card's compute processes,
+              # recorded not recomputed; absent in runs stored earlier
 
 Series
   run_id, metric, unit, source, quality: measured | derived
@@ -247,6 +250,9 @@ lmcompat(Adapter)
 
 nvml(Adapter)
   reads power, clocks, temperature, vram, utilization, throttle reasons
+  enumerates the card's compute processes (pid, memory, name)
+  the observer stores a first-tick snapshot in Run.environment and the
+  report prints it; a second process on the card flags the run contended
 
 nsys(Adapter) / ncu(Adapter)
   Phase 3+, optional, import only

@@ -96,6 +96,25 @@ def _last(samples: list[tuple[float, float]]) -> int:
     return int(samples[-1][1]) if samples else 0
 
 
+def _gpu_processes_lines(run: Run) -> list[str]:
+    """The co-tenants the observer recorded, or an honest unavailable line.
+
+    The snapshot names every compute process that held the card at the
+    first tick, in order of its memory. It does not say which one is the
+    engine; that split is the operator's to make from the names and sizes.
+    """
+    procs = run.environment.get("gpu_processes") if isinstance(run.environment, dict) else None
+    if not procs:
+        return ["GPU processes:  unavailable - not recorded in this run  (unavailable)"]
+    out = [f"GPU processes:  {len(procs)}  (measured)"]
+    for proc in procs:
+        mib = proc.get("used_gpu_memory_bytes", 0) / 1048576
+        name = proc.get("process_name") or ""
+        label = f"  ({name})" if name else ""
+        out.append(f"  pid {proc.get('pid')}  {mib:.0f} MiB{label}  (measured)")
+    return out
+
+
 def _sampling(run: Run) -> str:
     sampling = run.sampling if isinstance(run.sampling, dict) else {}
     interval = sampling.get("interval_ms", "unknown")
@@ -122,9 +141,12 @@ def render(run: Run, profile: dict, rules: list[dict]) -> str:
         f"Engine:      {wl.engine_id} via {wl.adapter_id} model {wl.model_id or 'unknown'}  (measured)",
         f"GPU:         {hw.name} ({hw.arch}, cc {hw.compute_capability}) "
         f"driver {hw.driver_version} CUDA {hw.cuda_driver_version}  (measured)",
+    ]
+    lines.extend(_gpu_processes_lines(run))
+    lines.extend([
         f"Tier:        {', '.join(run.sources) if run.sources else 'unknown'}  (measured)",
         f"Samples:     {_sampling(run)}  (measured)",
-    ]
+    ])
     driver = wl.config.get("driver") if isinstance(wl.config, dict) else None
     if isinstance(driver, dict) and driver.get("id") == "spectra-bench":
         # The declared parameters are the operator's input, and the counts

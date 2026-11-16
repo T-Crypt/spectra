@@ -73,6 +73,21 @@ class NvmlTest(unittest.TestCase):
         s = Nvml.sample()
         self.assertAlmostEqual(float(s["power_limit_w"]), nvidia_smi("power.limit"), delta=1.0)
 
+    def test_processes_reports_pid_memory_and_name(self):
+        procs = Nvml.processes()
+        self.assertIsInstance(procs, list)
+        for proc in procs:
+            self.assertGreater(proc["pid"], 0)
+            self.assertGreaterEqual(proc["used_gpu_memory_bytes"], 0)
+            self.assertIsInstance(proc["process_name"], str)
+        # The enumerator and nvidia-smi must name the same processes, the
+        # same cross-check the adapter already applies to power.
+        smi_pids = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"],
+            capture_output=True, text=True, check=True,
+        ).stdout.split()
+        self.assertEqual({str(p["pid"]) for p in procs}, set(smi_pids))
+
 
 if __name__ == "__main__":
     unittest.main()

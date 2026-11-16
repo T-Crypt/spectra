@@ -323,6 +323,27 @@ def two_rules_run() -> Run:
     )
 
 
+def contended_run() -> Run:
+    """A second process holds the card during the whole window.
+
+    The recorded run with the request series removed, so the co-tenant rule
+    is the only rule that fires: everything else is as quiet as the clean
+    fixture, and the contamination is the one fact on the card.
+    """
+    run = recorded_run(with_requests=False)
+    run.series.append(_flat("gpu_process_count", 2.0, "count", "nvml"))
+    run.series.append(_flat("gpu_process_memory_bytes", 17.0 * 1024.0 ** 3, "bytes", "nvml"))
+    run.environment = {
+        "gpu_processes": [
+            {"pid": 1293313, "used_gpu_memory_bytes": 17 * 1024 ** 3,
+             "process_name": "python3.13"},
+            {"pid": 44201, "used_gpu_memory_bytes": 18912 * 1024 ** 2,
+             "process_name": ""},
+        ],
+    }
+    return run
+
+
 def profile() -> dict:
     from adascope.reference import load_profile
 

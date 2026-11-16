@@ -83,6 +83,11 @@ class Run:
     sources: list[str] = field(default_factory=list)
     artifacts: list[str] = field(default_factory=list)
     series: list[Series] = field(default_factory=list)
+    # Environment the observation happened in, recorded not recomputed.
+    # Today: a first-tick snapshot of the card's compute processes under
+    # "gpu_processes". Runs stored before the field existed carry no key and
+    # load with the empty default.
+    environment: dict = field(default_factory=dict)
 
 
 @dataclass

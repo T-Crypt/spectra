@@ -2,6 +2,7 @@ Run:         fixture-recorded  (2026-10-15T12:00:00Z -> 2026-10-15T12:10:00Z)  (
 Workload:    decode_tokens_per_second (maximize)  (measured)
 Engine:      ninfer via lmcompat model NInfer-Qwen3.8-27B  (measured)
 GPU:         NVIDIA GeForce RTX 4090 (sm_89, cc 8.9) driver 615.78.08 CUDA 13.4  (measured)
+GPU processes:  unavailable - not recorded in this run  (unavailable)
 Tier:        nvml, lmcompat, lmcompat:jsonl  (measured)
 Samples:     20 at 500 ms over 600.0 s  (measured)
 

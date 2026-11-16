@@ -8,7 +8,7 @@ here. Everything downstream trusts the types.
 from __future__ import annotations
 
 import ctypes
-from ctypes import byref, c_int, c_uint, c_ulonglong, create_string_buffer
+from ctypes import byref, c_char, c_int, c_uint, c_ulonglong, create_string_buffer
 
 from ..model import HardwareProfile
 
@@ -35,6 +35,24 @@ class _Utilization(ctypes.Structure):
 
 class _Memory(ctypes.Structure):
     _fields_ = [("total", c_ulonglong), ("free", c_ulonglong), ("used", c_ulonglong)]
+
+
+class _ProcessInfo(ctypes.Structure):
+    """nvmlProcessInfo_t, shaped for the v2 enumerator.
+
+    The leading fields are fixed by the ABI; ``processName`` is the last
+    field in the driver's struct and is declared wider than the driver
+    writes so an older driver's smaller buffer can never overrun the
+    allocation. The name is empty on drivers that predate it.
+    """
+
+    _fields_ = [
+        ("pid", c_uint),
+        ("usedGpuMemory", c_ulonglong),
+        ("gpuInstanceId", c_int),
+        ("computeInstanceId", c_int),
+        ("processName", c_char * 256),
+    ]
 
 
 def _check(rc: int, call: str) -> None:
@@ -164,6 +182,38 @@ class Nvml:
             "throttle_reasons": reasons.value,
         }
         out.update(_decode_throttle(reasons.value))
+        return out
+
+    @staticmethod
+    def processes(device_index: int = 0) -> list[dict]:
+        """The compute processes on the device, one dict each.
+
+        Each dict carries ``pid``, ``used_gpu_memory_bytes`` and
+        ``process_name`` (empty string on drivers that do not report it).
+        This is the read-only answer to ``nvidia-smi --query-compute-apps``:
+        it names who is on the card, it does not say which one is the
+        engine. The observer stores the list in the run's environment and
+        the report prints it.
+        """
+        lib = _load()
+        dev = _handle(lib, device_index)
+        count = c_uint(0)
+        lib.nvmlDeviceGetComputeRunningProcesses_v2.restype = c_int
+        _check(lib.nvmlDeviceGetComputeRunningProcesses_v2(dev, byref(count), None),
+               "nvmlDeviceGetComputeRunningProcesses_v2(count)")
+        if count.value == 0:
+            return []
+        infos = (_ProcessInfo * count.value)()
+        _check(lib.nvmlDeviceGetComputeRunningProcesses_v2(dev, byref(count), infos),
+               "nvmlDeviceGetComputeRunningProcesses_v2")
+        out = []
+        for info in infos[:count.value]:
+            name = info.processName.decode("utf-8", errors="replace").split("\0")[0]
+            out.append({
+                "pid": info.pid,
+                "used_gpu_memory_bytes": info.usedGpuMemory,
+                "process_name": name,
+            })
         return out
 
     @staticmethod

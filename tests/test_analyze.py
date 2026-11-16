@@ -173,6 +173,28 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual([h.rules[0] for h in hypotheses_from_run(
             fixtures.jsonl_only_run(), profile(), rules())], [])
 
+    def test_co_tenant_rule_fires_measured(self):
+        # RESEARCH.md section 6: record the contention, do not recompute it.
+        run = fixtures.contended_run()
+        facts = facts_from_run(run, profile())
+        self.assertTrue(facts["co_tenant"])
+        hyps = rank(hypotheses_from_run(run, profile(), rules()))
+        fired = [h for h in hyps if "sm89.gpu-co-tenant" in h.rules]
+        self.assertEqual(len(fired), 1)
+        self.assertIn("contaminated", fired[0].claim)
+        self.assertIs(fired[0].confidence, Quality.MEASURED)
+        obs = {o.metric: o for o in observations_from_run(run)}
+        self.assertIn("gpu_process_count", obs)
+        self.assertEqual(obs["gpu_process_count"].value, 2.0)
+
+    def test_a_single_process_on_the_card_is_no_co_tenant(self):
+        run = fixtures.recorded_run(with_requests=False)
+        run.series.append(fixtures._flat("gpu_process_count", 1.0, "count", "nvml"))
+        self.assertFalse(facts_from_run(run, profile())["co_tenant"])
+        fired = [h for h in hypotheses_from_run(run, profile(), rules())
+                 if "sm89.gpu-co-tenant" in h.rules]
+        self.assertEqual(fired, [])
+
 
 if __name__ == "__main__":
     unittest.main()

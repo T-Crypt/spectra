@@ -196,6 +196,7 @@ def observe(
     driver_threads: list = []
     driver_events: list[tuple[float, str]] = []
     driver_lock = threading.Lock()
+    env_snapshot: dict | None = None
     if load_cfg:
         prompt, _prompt_words = build_prompt(load_cfg["prompt_words"])
 
@@ -217,6 +218,20 @@ def observe(
             hw_failure = str(exc)
         if sample:
             hw_samples += 1
+        # Co-tenant recording: who else is on the card, this tick. A failure
+        # of the enumerator must not kill the run; the series is simply
+        # shorter and the report says what it could not record.
+        try:
+            procs = Nvml.processes()
+        except Exception:
+            procs = None
+        if procs is not None:
+            hw_accum.setdefault("gpu_process_count", []).append((elapsed, float(len(procs))))
+            hw_accum.setdefault("gpu_process_memory_bytes", []).append(
+                (elapsed, float(sum(p["used_gpu_memory_bytes"] for p in procs))))
+            if env_snapshot is None:
+                env_snapshot = {"gpu_processes": sorted(
+                    procs, key=lambda p: -p["used_gpu_memory_bytes"])}
         for key, value in sample.items():
             if isinstance(value, bool):
                 point = (elapsed, 1.0 if value else 0.0)
@@ -285,6 +300,7 @@ def observe(
         sources=sources,
         artifacts=[jsonl_path] if jsonl_path else [],
         series=series,
+        environment=dict(env_snapshot) if env_snapshot is not None else {},
     )
     dest = Path(out)
     if dest.suffix == ".json":
