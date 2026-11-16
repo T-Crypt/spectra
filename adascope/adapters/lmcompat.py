@@ -206,6 +206,8 @@ class LmCompat:
     """HTTP client for an lmcompat-style inference server."""
 
     def __init__(self, host: str, port: int, timeout_s: float = 5.0) -> None:
+        if not isinstance(host, str) or not host or any(c in host for c in "/?# \t\r\n"):
+            raise ValueError(f"invalid host: {host!r}")
         self.host = host
         self.port = port
         self.timeout_s = timeout_s
